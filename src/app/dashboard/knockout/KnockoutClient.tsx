@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Save, Loader2, Check, AlertCircle, Trophy, Lock } from 'lucide-react';
+import { ChevronDown, ChevronRight, Save, Loader2, Check, AlertCircle, Trophy, Lock, Zap } from 'lucide-react';
 import { TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { BRACKET, PHASE_LABELS, PHASE_SHORT, type BracketMatch } from '@/lib/bracket';
 import { buildUserBracket, type ResolvedMatch } from '@/lib/bracket-builder';
@@ -47,7 +47,39 @@ export default function KnockoutClient({
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  // Construir bracket resuelto basado en predicciones de grupos + picks + predicciones knockout
+  // Calcular picks forzados (slots con un solo país posible, en cascada)
+  const forcedPicks = useMemo(() => {
+    const forced: Record<string, string> = {};
+    let changed = true;
+    let iterations = 0;
+    while (changed && iterations < 20) {
+      changed = false;
+      iterations++;
+      const usedTeams = new Set([
+        ...Object.values(picks).filter(Boolean),
+        ...Object.values(forced),
+      ]);
+      for (const slot of thirdPlaceSlots) {
+        if (forced[slot.slot_id] || picks[slot.slot_id]) continue;
+        const candidates = top8Thirds.filter(team => {
+          const tg = thirdsByGroup[team];
+          if (!slot.allowed_groups.includes(tg)) return false;
+          if (usedTeams.has(team)) return false;
+          return true;
+        });
+        if (candidates.length === 1) {
+          forced[slot.slot_id] = candidates[0];
+          changed = true;
+        }
+      }
+    }
+    return forced;
+  }, [picks, top8Thirds, thirdsByGroup, thirdPlaceSlots]);
+
+  // Picks efectivos = forzados ∪ del usuario
+  const effectivePicks = useMemo(() => ({ ...forcedPicks, ...picks }), [forcedPicks, picks]);
+
+  // Construir bracket basado en picks efectivos
   const userBracket = useMemo(() => {
     return buildUserBracket(
       groupPredictions,
@@ -58,33 +90,31 @@ export default function KnockoutClient({
           winner_team: p.winner_team,
         }])
       ),
-      picks
+      effectivePicks
     );
-  }, [groupPredictions, preds, picks]);
+  }, [groupPredictions, preds, effectivePicks]);
 
-  const bracketById = useMemo(() => {
-    const m: Record<string, ResolvedMatch> = {};
-    userBracket.forEach(r => { m[r.id] = r; });
-    return m;
-  }, [userBracket]);
-
-  // Pickeable groups por slot (los grupos permitidos cuyo 3er está en el top 8)
+  // Disponibles por slot
   const availableThirdsBySlot = useMemo(() => {
-    const usedTeams = new Set(Object.values(picks).filter(Boolean));
+    const usedTeams = new Set(Object.values(effectivePicks).filter(Boolean));
     const map: Record<string, string[]> = {};
     thirdPlaceSlots.forEach(slot => {
-      const myCurrentPick = picks[slot.slot_id];
+      if (forcedPicks[slot.slot_id]) {
+        map[slot.slot_id] = [forcedPicks[slot.slot_id]];
+        return;
+      }
+      const myPick = picks[slot.slot_id];
       const candidates = top8Thirds.filter(team => {
-        const teamGroup = thirdsByGroup[team];
-        if (!slot.allowed_groups.includes(teamGroup)) return false;
-        if (team === myCurrentPick) return true; // mantener si ya elegido
+        const tg = thirdsByGroup[team];
+        if (!slot.allowed_groups.includes(tg)) return false;
+        if (team === myPick) return true;
         if (usedTeams.has(team)) return false;
         return true;
       });
       map[slot.slot_id] = candidates;
     });
     return map;
-  }, [picks, top8Thirds, thirdsByGroup, thirdPlaceSlots]);
+  }, [picks, forcedPicks, effectivePicks, top8Thirds, thirdsByGroup, thirdPlaceSlots]);
 
   const updatePick = (slotId: string, team: string) => {
     setPicks({ ...picks, [slotId]: team });
@@ -95,7 +125,6 @@ export default function KnockoutClient({
     if (val !== '' && (isNaN(+val) || +val < 0 || +val > 30)) return;
     const cur = preds[matchId] ?? { home_score: '' as const, away_score: '' as const, winner_team: null };
     const next: KPred = { ...cur, [side]: val === '' ? '' : +val };
-    // Si ya no es empate, limpiar winner_team
     if (next.home_score !== '' && next.away_score !== '' && next.home_score !== next.away_score) {
       next.winner_team = null;
     }
@@ -112,16 +141,13 @@ export default function KnockoutClient({
   const save = async () => {
     setSaving(true);
     const supabase = createClient();
-
-    // 1. Guardar picks de 3ros lugares
-    const pickRows = Object.entries(picks)
+    // Guardar TODOS los picks (forzados + manuales)
+    const pickRows = Object.entries(effectivePicks)
       .filter(([_, t]) => !!t)
       .map(([slot_id, team]) => ({ user_id: userId, slot_id, team }));
     if (pickRows.length > 0) {
       await supabase.from('user_third_place_picks').upsert(pickRows, { onConflict: 'user_id,slot_id' });
     }
-
-    // 2. Guardar predicciones de eliminatorias
     const predRows = Object.entries(preds)
       .filter(([_, p]) => p.home_score !== '' && p.away_score !== '')
       .map(([match_id, p]) => ({
@@ -133,7 +159,6 @@ export default function KnockoutClient({
     if (predRows.length > 0) {
       await supabase.from('match_predictions').upsert(predRows, { onConflict: 'user_id,match_id' });
     }
-
     setSaving(false);
     setDirty(false);
     setSavedAt(Date.now());
@@ -141,15 +166,13 @@ export default function KnockoutClient({
     router.refresh();
   };
 
-  // Stats de progreso
   const totalSlotsToPick = thirdPlaceSlots.length;
-  const slotsPicked = Object.values(picks).filter(Boolean).length;
+  const slotsPicked = Object.values(effectivePicks).filter(Boolean).length;
   const totalMatches = BRACKET.length;
   const matchesWithPred = BRACKET.filter(m => {
     const p = preds[m.id]; return p && p.home_score !== '' && p.away_score !== '';
   }).length;
 
-  // Pts ganados sumando resultados oficiales
   const pointsTotal = useMemo(() => {
     let total = 0;
     BRACKET.forEach(m => {
@@ -190,7 +213,7 @@ export default function KnockoutClient({
         </div>
       </div>
 
-      {/* Sección 3ros lugares */}
+      {/* Picks de 3ros con auto-fill */}
       <div className="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-lime-400/30 rounded-2xl p-5 mb-6">
         <div className="flex items-start gap-3 mb-4">
           <div className="bg-lime-400 text-black p-2 rounded-lg flex-shrink-0">
@@ -205,7 +228,7 @@ export default function KnockoutClient({
                   ? top8Thirds.map(t => `${FLAG[t]} ${TEAMS_ES[t]}`).join(', ')
                   : 'Aún sin determinar (faltan predicciones de grupos)'}
               </span>
-              . Asigna cada uno a una llave (cada equipo solo se puede usar una vez).
+              . Las llaves con una sola opción se auto-asignan ⚡.
             </p>
           </div>
         </div>
@@ -214,24 +237,35 @@ export default function KnockoutClient({
           {thirdPlaceSlots.map(slot => {
             const candidates = availableThirdsBySlot[slot.slot_id] ?? [];
             const allowedLabel = slot.allowed_groups.join('');
+            const isForced = !!forcedPicks[slot.slot_id];
+            const currentPick = effectivePicks[slot.slot_id];
+
             return (
-              <div key={slot.slot_id} className="flex items-center gap-2 bg-black/40 rounded-lg p-2">
+              <div key={slot.slot_id} className={`flex items-center gap-2 rounded-lg p-2 ${isForced ? 'bg-lime-400/10 border border-lime-400/30' : 'bg-black/40'}`}>
                 <span className="text-xs uppercase tracking-wider text-zinc-400 font-bold w-20 flex-shrink-0">
                   {slot.slot_id.toUpperCase()}<br/><span className="text-zinc-600 font-normal">3-{allowedLabel}</span>
                 </span>
-                <select
-                  value={picks[slot.slot_id] ?? ''}
-                  onChange={e => updatePick(slot.slot_id, e.target.value)}
-                  disabled={isLocked}
-                  className="flex-1 bg-black border border-zinc-700 rounded px-2 py-1.5 text-sm text-white disabled:opacity-50"
-                >
-                  <option value="">— Elegir 3ro —</option>
-                  {candidates.map(t => (
-                    <option key={t} value={t}>
-                      {FLAG[t]} {TEAMS_ES[t]} (Grupo {thirdsByGroup[t]})
-                    </option>
-                  ))}
-                </select>
+                {isForced ? (
+                  <div className="flex-1 bg-black border border-lime-400/30 rounded px-2 py-1.5 text-sm text-lime-400 flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 flex-shrink-0"/>
+                    <span>{FLAG[currentPick]} {TEAMS_ES[currentPick]}</span>
+                    <span className="text-zinc-500 text-xs ml-auto">auto</span>
+                  </div>
+                ) : (
+                  <select
+                    value={picks[slot.slot_id] ?? ''}
+                    onChange={e => updatePick(slot.slot_id, e.target.value)}
+                    disabled={isLocked}
+                    className="flex-1 bg-black border border-zinc-700 rounded px-2 py-1.5 text-sm text-white disabled:opacity-50"
+                  >
+                    <option value="">— Elegir 3ro —</option>
+                    {candidates.map(t => (
+                      <option key={t} value={t}>
+                        {FLAG[t]} {TEAMS_ES[t]} (Grupo {thirdsByGroup[t]})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             );
           })}
@@ -248,7 +282,6 @@ export default function KnockoutClient({
         </div>
       )}
 
-      {/* Bracket por fases */}
       <div className="space-y-3">
         {phasesInOrder.map(phaseKey => {
           const phaseMatches = userBracket.filter(m => m.phase === phaseKey);
@@ -285,7 +318,6 @@ export default function KnockoutClient({
                       { home_score: pred.home_score as number, away_score: pred.away_score as number },
                       result
                     ) : null;
-
                     const isDraw = pred.home_score !== '' && pred.away_score !== '' && pred.home_score === pred.away_score;
 
                     return (
@@ -298,7 +330,6 @@ export default function KnockoutClient({
                             {new Date(m.match_date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}
                           </span>
                         </div>
-
                         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
                           <div className="flex items-center justify-end gap-2 min-w-0">
                             <span className={`font-medium text-right truncate ${!home ? 'text-zinc-600 italic' : ''}`}>
@@ -331,7 +362,6 @@ export default function KnockoutClient({
                           </div>
                         </div>
 
-                        {/* Selector de ganador en empates */}
                         {isDraw && hasTeams && (
                           <div className="mt-3 pt-3 border-t border-zinc-800">
                             <div className="text-xs uppercase tracking-wider text-zinc-500 font-bold mb-2">
@@ -360,7 +390,6 @@ export default function KnockoutClient({
                           </div>
                         )}
 
-                        {/* Resultado oficial sutil */}
                         {result && (
                           <div className="mt-3 pt-2 border-t border-zinc-800 text-xs flex items-center justify-center gap-3 text-zinc-500">
                             <span>Resultado: <span className="text-zinc-300 font-medium">{result.home_score}–{result.away_score}</span></span>
@@ -383,7 +412,6 @@ export default function KnockoutClient({
         })}
       </div>
 
-      {/* Botón flotante guardar */}
       {!isLocked && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30">
           {savedAt ? (
