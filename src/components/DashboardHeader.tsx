@@ -23,11 +23,13 @@ export default function DashboardHeader({
 
   const tabs = [
     { href: '/dashboard', label: 'Fase de Grupos' },
+    { href: '/dashboard/knockout', label: 'Eliminatorias' },
     { href: '/dashboard/bonus', label: 'Goleador & Campeón' },
     { href: '/dashboard/leaderboard', label: 'Tabla' },
     { href: '/rules', label: 'Reglas' },
     ...(isAdmin ? [
       { href: '/dashboard/admin', label: 'Resultados (Admin)' },
+      { href: '/dashboard/admin/knockout', label: 'Bracket (Admin)' },
       { href: '/dashboard/admin/players', label: 'Gestión (Admin)' },
     ] : []),
   ];
@@ -35,20 +37,16 @@ export default function DashboardHeader({
   return (
     <header className="border-b border-zinc-800 sticky top-0 bg-black/95 backdrop-blur z-40">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        {/* BRANDING ICONICO */}
         <Link href="/dashboard" className="flex items-center gap-3 flex-shrink-0">
-          {/* Banderas en pill */}
           <div className="hidden md:flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 rounded-full px-2.5 py-1">
             <span className="text-xl leading-none">🇨🇦</span>
             <span className="text-xl leading-none">🇺🇸</span>
             <span className="text-xl leading-none">🇲🇽</span>
           </div>
-          {/* Logo MUNDIAL 2026 */}
           <div className="flex items-baseline gap-1.5">
             <span className="font-display text-2xl text-white leading-none">MUNDIAL</span>
             <span className="font-display text-2xl bg-gradient-to-r from-lime-400 via-yellow-300 to-red-500 bg-clip-text text-transparent leading-none">2026</span>
           </div>
-          {/* Sticker QUINIELA */}
           <div className="bg-lime-400 text-black px-1.5 py-0.5 font-display text-xs -rotate-3 hidden lg:block leading-none">QUINIELA</div>
         </Link>
 

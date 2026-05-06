@@ -78,3 +78,27 @@ export const TOP_SCORER_SUGGESTIONS = [
   'Lamine Yamal', 'Vinícius Jr.', 'Julián Álvarez', 'Jude Bellingham', 'Mohamed Salah',
   'Heung-min Son', 'Romelu Lukaku', 'Rodrygo', 'Kevin De Bruyne', 'Florian Wirtz',
 ];
+
+// =====================================================
+// FASES ELIMINATORIAS - MUNDIAL 2026
+// =====================================================
+
+export const KNOCKOUT_PHASES = {
+  round_of_32: { label: 'Ronda de 32', short: 'R32', count: 16, order: 1 },
+  round_of_16: { label: 'Octavos de Final', short: 'R16', count: 8, order: 2 },
+  quarter_finals: { label: 'Cuartos de Final', short: 'CF', count: 4, order: 3 },
+  semi_finals: { label: 'Semifinales', short: 'SF', count: 2, order: 4 },
+  third_place: { label: 'Tercer Puesto', short: '3°', count: 1, order: 5 },
+  final: { label: 'Final', short: 'F', count: 1, order: 6 },
+} as const;
+
+export type KnockoutPhase = keyof typeof KNOCKOUT_PHASES;
+
+export type KnockoutMatch = {
+  id: string;
+  phase: KnockoutPhase;
+  position: number;
+  match_date: string;
+  home_team: string | null;
+  away_team: string | null;
+};

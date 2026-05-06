@@ -1,13 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { Target, Crown, Save, Loader2, Check } from 'lucide-react';
+import { Target, Crown, Save, Loader2, Check, CheckCircle2, XCircle } from 'lucide-react';
 import { ALL_TEAMS, TEAMS_ES, FLAG, TOP_SCORER_SUGGESTIONS } from '@/lib/tournament-data';
 import { createClient } from '@/lib/supabase/client';
 
 export default function BonusClient({
-  initial, locked, userId,
-}: { initial: { top_scorer: string; champion: string }; locked: boolean; userId: string }) {
+  initial, locked, userId, officialTopScorer, officialChampion,
+}: {
+  initial: { top_scorer: string; champion: string };
+  locked: boolean;
+  userId: string;
+  officialTopScorer: string | null;
+  officialChampion: string | null;
+}) {
   const [scorer, setScorer] = useState(initial.top_scorer);
   const [champion, setChampion] = useState(initial.champion);
   const [dirty, setDirty] = useState(false);
@@ -29,6 +35,11 @@ export default function BonusClient({
   };
 
   const sortedTeams = [...ALL_TEAMS].sort((a,b) => TEAMS_ES[a].localeCompare(TEAMS_ES[b]));
+
+  // Verificación de aciertos
+  const scorerCorrect = !!officialTopScorer && !!scorer.trim() &&
+    officialTopScorer.trim().toLowerCase() === scorer.trim().toLowerCase();
+  const championCorrect = !!officialChampion && !!champion && officialChampion === champion;
 
   return (
     <div>
@@ -59,6 +70,18 @@ export default function BonusClient({
               ))}
             </div>
           </div>
+
+          {/* Resultado oficial sutil */}
+          {officialTopScorer && (
+            <div className="mt-4 pt-4 border-t border-zinc-800 text-xs flex items-center justify-between text-zinc-500">
+              <span>Goleador oficial: <span className="text-zinc-300 font-medium">{officialTopScorer}</span></span>
+              {scorerCorrect ? (
+                <span className="text-lime-400 font-bold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5"/>+5 pts</span>
+              ) : (
+                <span className="text-zinc-600 flex items-center gap-1"><XCircle className="w-3.5 h-3.5"/>+0 pts</span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-zinc-800 rounded-2xl p-6">
@@ -80,6 +103,18 @@ export default function BonusClient({
                 <div className="text-xs uppercase tracking-wider text-zinc-500">Tu apuesta</div>
                 <div className="font-display text-2xl text-lime-400">{TEAMS_ES[champion]}</div>
               </div>
+            </div>
+          )}
+
+          {/* Resultado oficial sutil */}
+          {officialChampion && (
+            <div className="mt-4 pt-4 border-t border-zinc-800 text-xs flex items-center justify-between text-zinc-500">
+              <span>Campeón oficial: <span className="text-zinc-300 font-medium">{FLAG[officialChampion]} {TEAMS_ES[officialChampion]}</span></span>
+              {championCorrect ? (
+                <span className="text-lime-400 font-bold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5"/>+5 pts</span>
+              ) : (
+                <span className="text-zinc-600 flex items-center gap-1"><XCircle className="w-3.5 h-3.5"/>+0 pts</span>
+              )}
             </div>
           )}
         </div>
