@@ -16,8 +16,20 @@ export default function RulesPage() {
         </Link>
 
         <div className="mb-10">
+          {/* Branding iconico */}
+          <div className="inline-flex items-center gap-3 bg-zinc-900 border border-zinc-700 rounded-full px-5 py-2.5 text-xs uppercase tracking-widest text-zinc-300 mb-5">
+            <span className="text-2xl leading-none">🇨🇦</span>
+            <span className="text-2xl leading-none">🇺🇸</span>
+            <span className="text-2xl leading-none">🇲🇽</span>
+            <span className="text-zinc-500 mx-1">·</span>
+            <span className="font-bold">11 JUN — 19 JUL 2026</span>
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="font-display text-5xl text-white leading-none">MUNDIAL</span>
+            <span className="font-display text-5xl bg-gradient-to-r from-lime-400 via-yellow-300 to-red-500 bg-clip-text text-transparent leading-none">2026</span>
+          </div>
           <div className="inline-block bg-lime-400 text-black px-3 py-0.5 font-display text-xl -rotate-2 shadow-lg shadow-lime-400/20 mb-4">QUINIELA</div>
-          <h1 className="font-display text-6xl leading-none mb-2">REGLAS</h1>
+          <h1 className="font-display text-6xl leading-none mb-2 mt-4">REGLAS</h1>
           <p className="text-zinc-400">Cómo funciona la quiniela del Mundial 2026</p>
         </div>
 

@@ -67,8 +67,10 @@ export default function RegisterPage() {
       <div className="relative min-h-screen flex items-center justify-center p-4">
         <div className="max-w-md w-full">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full px-4 py-1.5 text-xs uppercase tracking-widest text-zinc-300 mb-5">
-              <span>🇨🇦</span><span>🇺🇸</span><span>🇲🇽</span>
+            <div className="inline-flex items-center gap-3 bg-zinc-900/80 backdrop-blur border border-zinc-700 rounded-full px-5 py-2.5 text-xs uppercase tracking-widest text-zinc-300 mb-5">
+              <span className="text-3xl leading-none">🇨🇦</span>
+              <span className="text-3xl leading-none">🇺🇸</span>
+              <span className="text-3xl leading-none">🇲🇽</span>
               <span className="text-zinc-500 mx-1">·</span>
               <span className="font-bold">11 JUN — 19 JUL 2026</span>
             </div>

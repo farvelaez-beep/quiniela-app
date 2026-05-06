@@ -34,13 +34,26 @@ export default function DashboardHeader({
 
   return (
     <header className="border-b border-zinc-800 sticky top-0 bg-black/95 backdrop-blur z-40">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <div className="bg-lime-400 text-black px-2 py-0.5 font-display text-lg leading-none">Q26</div>
-          <div className="font-display text-2xl leading-none hidden sm:block">QUINIELA MUNDIAL</div>
+      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+        {/* BRANDING ICONICO */}
+        <Link href="/dashboard" className="flex items-center gap-3 flex-shrink-0">
+          {/* Banderas en pill */}
+          <div className="hidden md:flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 rounded-full px-2.5 py-1">
+            <span className="text-xl leading-none">🇨🇦</span>
+            <span className="text-xl leading-none">🇺🇸</span>
+            <span className="text-xl leading-none">🇲🇽</span>
+          </div>
+          {/* Logo MUNDIAL 2026 */}
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-display text-2xl text-white leading-none">MUNDIAL</span>
+            <span className="font-display text-2xl bg-gradient-to-r from-lime-400 via-yellow-300 to-red-500 bg-clip-text text-transparent leading-none">2026</span>
+          </div>
+          {/* Sticker QUINIELA */}
+          <div className="bg-lime-400 text-black px-1.5 py-0.5 font-display text-xs -rotate-3 hidden lg:block leading-none">QUINIELA</div>
         </Link>
+
         <div className="flex items-center gap-3 text-sm">
-          <span className="text-zinc-300 font-medium">{isAdmin && '👑 '}{displayName}</span>
+          <span className="text-zinc-300 font-medium hidden sm:inline">{isAdmin && '👑 '}{displayName}</span>
           <button onClick={logout} disabled={loggingOut} className="text-zinc-400 hover:text-white disabled:opacity-50" title="Salir">
             {loggingOut ? <Loader2 className="w-4 h-4 animate-spin"/> : <LogOut className="w-4 h-4"/>}
           </button>
