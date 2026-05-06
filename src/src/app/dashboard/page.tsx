@@ -1,0 +1,40 @@
+import { createClient } from '@/lib/supabase/server';
+import GroupStageClient from './GroupStageClient';
+
+export const dynamic = 'force-dynamic';
+
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const [
+    { data: predictions },
+    { data: results },
+    { data: settings },
+  ] = await Promise.all([
+    supabase.from('match_predictions')
+      .select('match_id, home_score, away_score')
+      .eq('user_id', user!.id),
+    supabase.from('match_results').select('match_id, home_score, away_score'),
+    supabase.from('tournament_settings').select('is_locked').eq('id', 1).single(),
+  ]);
+
+  const predMap: Record<string, { home_score: number; away_score: number }> = {};
+  (predictions ?? []).forEach(p => {
+    predMap[p.match_id] = { home_score: p.home_score, away_score: p.away_score };
+  });
+
+  const resultsMap: Record<string, { home_score: number; away_score: number }> = {};
+  (results ?? []).forEach(r => {
+    resultsMap[r.match_id] = { home_score: r.home_score, away_score: r.away_score };
+  });
+
+  return (
+    <GroupStageClient
+      initialPredictions={predMap}
+      results={resultsMap}
+      locked={settings?.is_locked ?? false}
+      userId={user!.id}
+    />
+  );
+}
