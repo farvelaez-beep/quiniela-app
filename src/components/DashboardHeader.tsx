@@ -2,16 +2,19 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { LogOut, Lock } from 'lucide-react';
+import { LogOut, Lock, Loader2 } from 'lucide-react';
 
 export default function DashboardHeader({
   displayName, isAdmin, isLocked,
 }: { displayName: string; isAdmin: boolean; isLocked: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const logout = async () => {
+    setLoggingOut(true);
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
@@ -22,6 +25,7 @@ export default function DashboardHeader({
     { href: '/dashboard', label: 'Fase de Grupos' },
     { href: '/dashboard/bonus', label: 'Goleador & Campeón' },
     { href: '/dashboard/leaderboard', label: 'Tabla' },
+    { href: '/rules', label: 'Reglas' },
     ...(isAdmin ? [
       { href: '/dashboard/admin', label: 'Resultados (Admin)' },
       { href: '/dashboard/admin/players', label: 'Gestión (Admin)' },
@@ -37,8 +41,8 @@ export default function DashboardHeader({
         </Link>
         <div className="flex items-center gap-3 text-sm">
           <span className="text-zinc-300 font-medium">{isAdmin && '👑 '}{displayName}</span>
-          <button onClick={logout} className="text-zinc-400 hover:text-white" title="Salir">
-            <LogOut className="w-4 h-4"/>
+          <button onClick={logout} disabled={loggingOut} className="text-zinc-400 hover:text-white disabled:opacity-50" title="Salir">
+            {loggingOut ? <Loader2 className="w-4 h-4 animate-spin"/> : <LogOut className="w-4 h-4"/>}
           </button>
         </div>
       </div>

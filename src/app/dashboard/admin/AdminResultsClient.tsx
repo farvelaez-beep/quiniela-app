@@ -27,6 +27,7 @@ export default function AdminResultsClient({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [togglingLock, setTogglingLock] = useState(false);
 
   const updateMatch = (id: string, side: 'home_score'|'away_score', val: string) => {
     if (val !== '' && (isNaN(+val) || +val < 0 || +val > 30)) return;
@@ -39,7 +40,6 @@ export default function AdminResultsClient({
     setSaving(true);
     const supabase = createClient();
 
-    // 1) Guardar resultados de partidos
     const rows = Object.entries(results)
       .filter(([_, s]) => s.home_score !== '' && s.away_score !== '')
       .map(([match_id, s]) => ({ match_id, home_score: s.home_score as number, away_score: s.away_score as number }));
@@ -47,7 +47,6 @@ export default function AdminResultsClient({
       await supabase.from('match_results').upsert(rows, { onConflict: 'match_id' });
     }
 
-    // 2) Guardar bonus oficiales
     await supabase.from('tournament_settings').update({
       official_top_scorer: topScorer.trim() || null,
       official_champion: champion || null,
@@ -61,10 +60,12 @@ export default function AdminResultsClient({
   };
 
   const toggleLock = async () => {
+    setTogglingLock(true);
     const supabase = createClient();
     const newLocked = !locked;
     await supabase.from('tournament_settings').update({ is_locked: newLocked }).eq('id', 1);
     setLocked(newLocked);
+    setTogglingLock(false);
     router.refresh();
   };
 
@@ -77,15 +78,15 @@ export default function AdminResultsClient({
           <h2 className="font-display text-5xl leading-none">RESULTADOS OFICIALES</h2>
           <p className="text-zinc-400 text-sm mt-1">Carga los marcadores reales para que se calculen los puntos</p>
         </div>
-        <button onClick={toggleLock}
-          className={`px-4 py-2 rounded-lg font-bold uppercase text-sm flex items-center gap-2 ${
+        <button onClick={toggleLock} disabled={togglingLock}
+          className={`px-4 py-2 rounded-lg font-bold uppercase text-sm flex items-center gap-2 disabled:opacity-50 ${
             locked ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-white hover:bg-zinc-700'
           }`}>
-          {locked ? <><Lock className="w-4 h-4"/>Bloqueado</> : <><Unlock className="w-4 h-4"/>Bloquear quiniela</>}
+          {togglingLock ? <Loader2 className="w-4 h-4 animate-spin"/> : (locked ? <Lock className="w-4 h-4"/> : <Unlock className="w-4 h-4"/>)}
+          {locked ? 'Bloqueado' : 'Bloquear quiniela'}
         </button>
       </div>
 
-      {/* BONUS oficiales */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-4 grid md:grid-cols-2 gap-4">
         <div>
           <label className="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-1 block">Goleador oficial</label>
