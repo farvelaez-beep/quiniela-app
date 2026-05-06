@@ -72,7 +72,7 @@ export default function RegisterPage() {
             <label className="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-1 block">Tu nombre</label>
             <input value={displayName} onChange={e=>setDisplayName(e.target.value)}
               className="w-full bg-black border border-zinc-700 rounded-lg px-4 py-3 text-white focus:border-lime-400 focus:outline-none"
-              placeholder="Cómo apareces en la tabla" />
+              placeholder="" />
           </div>
 
           <div>
