@@ -2,27 +2,21 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Save, Loader2, Check, AlertCircle, Trophy, Lock, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight, Save, Loader2, Check, AlertCircle, Trophy, Lock, Sparkles } from 'lucide-react';
 import { TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { BRACKET, PHASE_LABELS, PHASE_SHORT, type BracketMatch } from '@/lib/bracket';
-import { buildUserBracket, type ResolvedMatch } from '@/lib/bracket-builder';
+import { buildUserBracket, computeFifaThirdAssignments } from '@/lib/bracket-builder';
 import { scoreMatch } from '@/lib/scoring';
 import { createClient } from '@/lib/supabase/client';
-import type { TeamStats } from '@/lib/standings';
 
 type KPred = { home_score: number | ''; away_score: number | ''; winner_team: string | null };
 
 export default function KnockoutClient({
-  userId,
-  groupPredictions, knockoutPredictions, thirdPlacePicks, thirdPlaceSlots,
-  standings, top8Thirds, thirdsByGroup, results, isLocked,
+  userId, groupPredictions, knockoutPredictions, top8Thirds, thirdsByGroup, results, isLocked,
 }: {
   userId: string;
   groupPredictions: Record<string, { home_score: number; away_score: number }>;
   knockoutPredictions: Record<string, { home_score: number; away_score: number; winner_team: string | null }>;
-  thirdPlacePicks: Record<string, string>;
-  thirdPlaceSlots: { slot_id: string; allowed_groups: string[] }[];
-  standings: Record<string, TeamStats[]>;
   top8Thirds: string[];
   thirdsByGroup: Record<string, string>;
   results: Record<string, { home_score: number; away_score: number }>;
@@ -30,7 +24,6 @@ export default function KnockoutClient({
 }) {
   const router = useRouter();
 
-  const [picks, setPicks] = useState<Record<string, string>>(thirdPlacePicks);
   const [preds, setPreds] = useState<Record<string, KPred>>(() => {
     const m: Record<string, KPred> = {};
     BRACKET.forEach(km => {
@@ -47,39 +40,7 @@ export default function KnockoutClient({
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  // Calcular picks forzados (slots con un solo país posible, en cascada)
-  const forcedPicks = useMemo(() => {
-    const forced: Record<string, string> = {};
-    let changed = true;
-    let iterations = 0;
-    while (changed && iterations < 20) {
-      changed = false;
-      iterations++;
-      const usedTeams = new Set([
-        ...Object.values(picks).filter(Boolean),
-        ...Object.values(forced),
-      ]);
-      for (const slot of thirdPlaceSlots) {
-        if (forced[slot.slot_id] || picks[slot.slot_id]) continue;
-        const candidates = top8Thirds.filter(team => {
-          const tg = thirdsByGroup[team];
-          if (!slot.allowed_groups.includes(tg)) return false;
-          if (usedTeams.has(team)) return false;
-          return true;
-        });
-        if (candidates.length === 1) {
-          forced[slot.slot_id] = candidates[0];
-          changed = true;
-        }
-      }
-    }
-    return forced;
-  }, [picks, top8Thirds, thirdsByGroup, thirdPlaceSlots]);
-
-  // Picks efectivos = forzados ∪ del usuario
-  const effectivePicks = useMemo(() => ({ ...forcedPicks, ...picks }), [forcedPicks, picks]);
-
-  // Construir bracket basado en picks efectivos
+  // Bracket completo + asignaciones FIFA
   const userBracket = useMemo(() => {
     return buildUserBracket(
       groupPredictions,
@@ -89,37 +50,11 @@ export default function KnockoutClient({
           away_score: p.away_score === '' ? 0 : (p.away_score as number),
           winner_team: p.winner_team,
         }])
-      ),
-      effectivePicks
+      )
     );
-  }, [groupPredictions, preds, effectivePicks]);
+  }, [groupPredictions, preds]);
 
-  // Disponibles por slot
-  const availableThirdsBySlot = useMemo(() => {
-    const usedTeams = new Set(Object.values(effectivePicks).filter(Boolean));
-    const map: Record<string, string[]> = {};
-    thirdPlaceSlots.forEach(slot => {
-      if (forcedPicks[slot.slot_id]) {
-        map[slot.slot_id] = [forcedPicks[slot.slot_id]];
-        return;
-      }
-      const myPick = picks[slot.slot_id];
-      const candidates = top8Thirds.filter(team => {
-        const tg = thirdsByGroup[team];
-        if (!slot.allowed_groups.includes(tg)) return false;
-        if (team === myPick) return true;
-        if (usedTeams.has(team)) return false;
-        return true;
-      });
-      map[slot.slot_id] = candidates;
-    });
-    return map;
-  }, [picks, forcedPicks, effectivePicks, top8Thirds, thirdsByGroup, thirdPlaceSlots]);
-
-  const updatePick = (slotId: string, team: string) => {
-    setPicks({ ...picks, [slotId]: team });
-    setDirty(true);
-  };
+  const fifaInfo = useMemo(() => computeFifaThirdAssignments(groupPredictions), [groupPredictions]);
 
   const updateScore = (matchId: string, side: 'home_score'|'away_score', val: string) => {
     if (val !== '' && (isNaN(+val) || +val < 0 || +val > 30)) return;
@@ -141,13 +76,6 @@ export default function KnockoutClient({
   const save = async () => {
     setSaving(true);
     const supabase = createClient();
-    // Guardar TODOS los picks (forzados + manuales)
-    const pickRows = Object.entries(effectivePicks)
-      .filter(([_, t]) => !!t)
-      .map(([slot_id, team]) => ({ user_id: userId, slot_id, team }));
-    if (pickRows.length > 0) {
-      await supabase.from('user_third_place_picks').upsert(pickRows, { onConflict: 'user_id,slot_id' });
-    }
     const predRows = Object.entries(preds)
       .filter(([_, p]) => p.home_score !== '' && p.away_score !== '')
       .map(([match_id, p]) => ({
@@ -166,8 +94,6 @@ export default function KnockoutClient({
     router.refresh();
   };
 
-  const totalSlotsToPick = thirdPlaceSlots.length;
-  const slotsPicked = Object.values(effectivePicks).filter(Boolean).length;
   const totalMatches = BRACKET.length;
   const matchesWithPred = BRACKET.filter(m => {
     const p = preds[m.id]; return p && p.home_score !== '' && p.away_score !== '';
@@ -188,13 +114,20 @@ export default function KnockoutClient({
 
   const phasesInOrder: BracketMatch['phase'][] = ['r32', 'r16', 'qf', 'sf', 'tp', 'final'];
 
+  // Slots R32 que reciben un 3ro lugar (ordenados por la columna FIFA: 1A, 1B, 1D, 1E, 1G, 1I, 1K, 1L)
+  const thirdSlotsOrdered = ['r32_11','r32_15','r32_7','r32_1','r32_8','r32_2','r32_16','r32_12'];
+  const thirdSlotLabels: Record<string, string> = {
+    'r32_11': '1A', 'r32_15': '1B', 'r32_7': '1D', 'r32_1': '1E',
+    'r32_8': '1G',  'r32_2': '1I',  'r32_16': '1K', 'r32_12': '1L',
+  };
+
   return (
     <div className="pb-24">
       <div className="flex items-end justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 className="font-display text-5xl leading-none">ELIMINATORIAS</h2>
           <p className="text-zinc-400 text-sm mt-1">
-            El bracket se arma solo con tus predicciones de grupos. Solo eliges los 3ros y predices marcadores.
+            El bracket se arma solo con tus predicciones de grupos. Asignación oficial de 3ros según el Anexo C de FIFA.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -213,66 +146,56 @@ export default function KnockoutClient({
         </div>
       </div>
 
-      {/* Picks de 3ros con auto-fill */}
+      {/* Asignación FIFA de 3ros */}
       <div className="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-lime-400/30 rounded-2xl p-5 mb-6">
         <div className="flex items-start gap-3 mb-4">
           <div className="bg-lime-400 text-black p-2 rounded-lg flex-shrink-0">
-            <AlertCircle className="w-5 h-5"/>
+            <Sparkles className="w-5 h-5"/>
           </div>
           <div>
-            <h3 className="font-display text-2xl">PICKS DE 3ROS LUGARES</h3>
+            <h3 className="font-display text-2xl">8 MEJORES 3ROS · ASIGNACIÓN FIFA</h3>
             <p className="text-sm text-zinc-400 mt-1">
-              Hay 8 llaves en R32 donde un 3er lugar entra. Según tus tablas, los 8 mejores 3ros son:{' '}
-              <span className="text-lime-400 font-medium">
-                {top8Thirds.length > 0
-                  ? top8Thirds.map(t => `${FLAG[t]} ${TEAMS_ES[t]}`).join(', ')
-                  : 'Aún sin determinar (faltan predicciones de grupos)'}
-              </span>
-              . Las llaves con una sola opción se auto-asignan ⚡.
+              Según el <strong className="text-white">Anexo C oficial de la FIFA</strong> (495 combinaciones), tu pronóstico determina automáticamente qué 3ro lugar va contra cada 1° de grupo.
             </p>
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-2">
-          {thirdPlaceSlots.map(slot => {
-            const candidates = availableThirdsBySlot[slot.slot_id] ?? [];
-            const allowedLabel = slot.allowed_groups.join('');
-            const isForced = !!forcedPicks[slot.slot_id];
-            const currentPick = effectivePicks[slot.slot_id];
-
-            return (
-              <div key={slot.slot_id} className={`flex items-center gap-2 rounded-lg p-2 ${isForced ? 'bg-lime-400/10 border border-lime-400/30' : 'bg-black/40'}`}>
-                <span className="text-xs uppercase tracking-wider text-zinc-400 font-bold w-20 flex-shrink-0">
-                  {slot.slot_id.toUpperCase()}<br/><span className="text-zinc-600 font-normal">3-{allowedLabel}</span>
-                </span>
-                {isForced ? (
-                  <div className="flex-1 bg-black border border-lime-400/30 rounded px-2 py-1.5 text-sm text-lime-400 flex items-center gap-2">
-                    <Zap className="w-3.5 h-3.5 flex-shrink-0"/>
-                    <span>{FLAG[currentPick]} {TEAMS_ES[currentPick]}</span>
-                    <span className="text-zinc-500 text-xs ml-auto">auto</span>
+        {top8Thirds.length === 8 && fifaInfo.fifaKey ? (
+          <>
+            <div className="text-xs text-zinc-500 mb-3">
+              Tus 8 mejores 3ros vienen de los grupos: <span className="font-mono text-lime-400">{fifaInfo.fifaKey.split('').join(', ')}</span>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {thirdSlotsOrdered.map(slotId => {
+                const team = fifaInfo.assignments[slotId];
+                const groupLetter = team ? thirdsByGroup[team] : null;
+                return (
+                  <div key={slotId} className="flex items-center gap-2 rounded-lg p-2 bg-black/40">
+                    <span className="text-xs uppercase tracking-wider text-zinc-400 font-bold w-16 flex-shrink-0">
+                      <div className="text-zinc-300">{thirdSlotLabels[slotId]} vs</div>
+                      <div className="text-zinc-600 text-[10px]">{slotId.toUpperCase()}</div>
+                    </span>
+                    <div className="flex-1 bg-black border border-lime-400/20 rounded px-2 py-1.5 text-sm text-lime-400 flex items-center gap-2">
+                      {team ? (
+                        <>
+                          <span>{FLAG[team]} {TEAMS_ES[team]}</span>
+                          <span className="text-zinc-500 text-xs ml-auto">3°{groupLetter}</span>
+                        </>
+                      ) : (
+                        <span className="text-zinc-600 italic">Calculando…</span>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <select
-                    value={picks[slot.slot_id] ?? ''}
-                    onChange={e => updatePick(slot.slot_id, e.target.value)}
-                    disabled={isLocked}
-                    className="flex-1 bg-black border border-zinc-700 rounded px-2 py-1.5 text-sm text-white disabled:opacity-50"
-                  >
-                    <option value="">— Elegir 3ro —</option>
-                    {candidates.map(t => (
-                      <option key={t} value={t}>
-                        {FLAG[t]} {TEAMS_ES[t]} (Grupo {thirdsByGroup[t]})
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div className="text-xs text-zinc-500 mt-3 text-right">
-          {slotsPicked}/{totalSlotsToPick} llaves asignadas
-        </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-8 text-zinc-500 text-sm">
+            <AlertCircle className="w-8 h-8 mx-auto mb-2 text-zinc-600"/>
+            Completa los 72 partidos de fase de grupos para ver la asignación oficial FIFA
+          </div>
+        )}
       </div>
 
       {isLocked && (
@@ -338,21 +261,17 @@ export default function KnockoutClient({
                             <span className="text-2xl">{home ? FLAG[home] : '⚽'}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <input
-                              type="number" min="0" max="30"
+                            <input type="number" min="0" max="30"
                               value={pred.home_score}
                               onChange={e => updateScore(m.id, 'home_score', e.target.value)}
                               disabled={!hasTeams || isLocked}
-                              className="w-12 h-10 bg-black border border-zinc-700 rounded text-center font-display text-xl text-lime-400 disabled:opacity-30 disabled:cursor-not-allowed"
-                            />
+                              className="w-12 h-10 bg-black border border-zinc-700 rounded text-center font-display text-xl text-lime-400 disabled:opacity-30 disabled:cursor-not-allowed" />
                             <span className="text-zinc-600">:</span>
-                            <input
-                              type="number" min="0" max="30"
+                            <input type="number" min="0" max="30"
                               value={pred.away_score}
                               onChange={e => updateScore(m.id, 'away_score', e.target.value)}
                               disabled={!hasTeams || isLocked}
-                              className="w-12 h-10 bg-black border border-zinc-700 rounded text-center font-display text-xl text-lime-400 disabled:opacity-30 disabled:cursor-not-allowed"
-                            />
+                              className="w-12 h-10 bg-black border border-zinc-700 rounded text-center font-display text-xl text-lime-400 disabled:opacity-30 disabled:cursor-not-allowed" />
                           </div>
                           <div className="flex items-center gap-2 min-w-0">
                             <span className="text-2xl">{away ? FLAG[away] : '⚽'}</span>
@@ -368,22 +287,16 @@ export default function KnockoutClient({
                               ¿Quién gana en penales?
                             </div>
                             <div className="flex gap-2">
-                              <button
-                                onClick={() => updateWinner(m.id, home)}
-                                disabled={isLocked}
+                              <button onClick={() => updateWinner(m.id, home)} disabled={isLocked}
                                 className={`flex-1 px-3 py-2 rounded text-sm font-medium ${
                                   pred.winner_team === home ? 'bg-lime-400 text-black' : 'bg-zinc-800 text-zinc-300'
-                                }`}
-                              >
+                                }`}>
                                 {FLAG[home!]} {TEAMS_ES[home!]}
                               </button>
-                              <button
-                                onClick={() => updateWinner(m.id, away)}
-                                disabled={isLocked}
+                              <button onClick={() => updateWinner(m.id, away)} disabled={isLocked}
                                 className={`flex-1 px-3 py-2 rounded text-sm font-medium ${
                                   pred.winner_team === away ? 'bg-lime-400 text-black' : 'bg-zinc-800 text-zinc-300'
-                                }`}
-                              >
+                                }`}>
                                 {FLAG[away!]} {TEAMS_ES[away!]}
                               </button>
                             </div>
