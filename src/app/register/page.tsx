@@ -34,7 +34,8 @@ const COUNTRY_CODES = [
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [alias, setAlias] = useState('');
   const [countryCode, setCountryCode] = useState('+57');
   const [phone, setPhone] = useState('');
   const [err, setErr] = useState('');
@@ -44,6 +45,13 @@ export default function RegisterPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(''); setLoading(true);
+
+    const trimmedFullName = fullName.trim();
+    if (!trimmedFullName || trimmedFullName.length < 3) {
+      setErr('Por favor ingresa tu nombre completo (mínimo 3 caracteres)');
+      setLoading(false);
+      return;
+    }
 
     if (password.length < 6) {
       setErr('La contraseña debe tener mínimo 6 caracteres');
@@ -60,12 +68,17 @@ export default function RegisterPage() {
 
     const fullPhone = `${countryCode} ${cleanPhone}`;
 
+    // Si el alias está vacío, derivamos del primer nombre
+    const trimmedAlias = alias.trim();
+    const finalAlias = trimmedAlias || trimmedFullName.split(' ')[0];
+
     const supabase = createClient();
     const { error } = await supabase.auth.signUp({
       email, password,
       options: {
         data: {
-          display_name: displayName.trim() || email.split('@')[0],
+          full_name: trimmedFullName,
+          display_name: finalAlias,
           phone_number: fullPhone,
         },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
@@ -124,10 +137,23 @@ export default function RegisterPage() {
             <h2 className="font-display text-3xl">REGISTRARME</h2>
 
             <div>
-              <label className="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-1 block">Tu nombre</label>
-              <input value={displayName} onChange={e=>setDisplayName(e.target.value)}
+              <label className="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-1 block">Nombre completo</label>
+              <input value={fullName} onChange={e=>setFullName(e.target.value)}
+                required
                 className="w-full bg-black border border-zinc-700 rounded-lg px-4 py-3 text-white focus:border-lime-400 focus:outline-none transition"
-                placeholder="Ej: Fernando" />
+                placeholder="Ej: Luis Martínez" />
+            </div>
+
+            <div>
+              <label className="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-1 block">
+                Alias <span className="text-zinc-500 normal-case font-normal">(opcional)</span>
+              </label>
+              <input value={alias} onChange={e=>setAlias(e.target.value)}
+                className="w-full bg-black border border-zinc-700 rounded-lg px-4 py-3 text-white focus:border-lime-400 focus:outline-none transition"
+                placeholder="Cómo quieres aparecer en la tabla" />
+              <div className="text-[11px] text-zinc-500 mt-1">
+                Si lo dejas vacío, usaremos tu primer nombre.
+              </div>
             </div>
 
             <div>

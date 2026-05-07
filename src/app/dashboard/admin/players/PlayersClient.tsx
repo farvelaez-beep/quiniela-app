@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 
 type Player = {
   id: string; email: string; name: string; phone: string;
+  fullName: string | null;
   paid: boolean; isAdmin: boolean; createdAt: string;
 };
 
@@ -95,6 +96,9 @@ export default function PlayersClient({
             <div>
               <div className="font-bold flex items-center gap-2">
                 {p.name} {p.isAdmin && <span className="text-yellow-400 text-xs">👑 ADMIN</span>}
+                {p.fullName && p.fullName !== p.name && (
+                  <span className="text-zinc-400 text-xs font-normal">· {p.fullName}</span>
+                )}
               </div>
               <div className="text-xs text-zinc-500">
                 {p.email}{p.phone && <> · 📱 {p.phone}</>} · Registrado: {new Date(p.createdAt).toLocaleDateString('es-CO')}
