@@ -43,19 +43,20 @@ export default async function AllPredictionsPage() {
     { data: predictions },
     { data: bonus },
   ] = await Promise.all([
-    supabase.from('profiles').select('id, display_name'),
+    supabase.from('profiles').select('id, display_name, email, paid'),
     supabase.from('match_predictions').select('user_id, match_id, home_score, away_score, winner_team'),
     supabase.from('bonus_predictions').select('user_id, top_scorer, champion'),
   ]);
 
-  // Sólo usuarios que hayan registrado al menos una predicción
+  // Sólo usuarios que hayan registrado al menos una predicción Y hayan pagado
   const usersWithPreds = new Set<string>();
   (predictions ?? []).forEach((p: any) => usersWithPreds.add(p.user_id));
   (bonus ?? []).forEach((b: any) => usersWithPreds.add(b.user_id));
 
-  const playerList = ((profiles ?? []) as Array<{ id: string; display_name: string | null }>)
+  const playerList = ((profiles ?? []) as Array<{ id: string; display_name: string | null; email: string | null; paid: boolean | null }>)
     .filter(p => usersWithPreds.has(p.id))
-    .map(p => ({ id: p.id, name: p.display_name || 'Sin nombre' }))
+    .filter(p => p.paid === true) // sólo pagados — los que no pagaron no compiten
+    .map(p => ({ id: p.id, name: p.display_name || 'Sin nombre', email: p.email || '' }))
     .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
   // Estructurar predicciones por usuario
@@ -81,6 +82,21 @@ export default async function AllPredictionsPage() {
   (bonus ?? []).forEach((b: any) => {
     bonusByUser[b.user_id] = { top_scorer: b.top_scorer, champion: b.champion };
   });
+
+  // Si no hay jugadores pagados con predicciones, mostrar mensaje
+  if (playerList.length === 0) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 text-center">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-10">
+          <div className="text-6xl mb-4">📋</div>
+          <h1 className="font-display text-4xl mb-3">PRONÓSTICOS DE TODOS</h1>
+          <p className="text-zinc-400">
+            Aún no hay jugadores con pago confirmado y pronósticos registrados.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AllPredictionsClient

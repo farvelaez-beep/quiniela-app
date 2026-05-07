@@ -15,11 +15,12 @@ export default function AllPredictionsClient({
   currentUserId, players, predsByUser, bonusByUser,
 }: {
   currentUserId: string;
-  players: { id: string; name: string }[];
+  players: { id: string; name: string; email: string }[];
   predsByUser: PredsByUser;
   bonusByUser: BonusByUser;
 }) {
-  const [selectedUserId, setSelectedUserId] = useState<string>(currentUserId);
+  const initialUserId = players.find(p => p.id === currentUserId)?.id ?? players[0]?.id ?? '';
+  const [selectedUserId, setSelectedUserId] = useState<string>(initialUserId);
   const [tab, setTab] = useState<'groups' | 'knockout' | 'bonus'>('groups');
 
   const selectedPlayer = players.find(p => p.id === selectedUserId);
@@ -59,12 +60,18 @@ export default function AllPredictionsClient({
           >
             {players.map(p => (
               <option key={p.id} value={p.id}>
-                {p.name}{p.id === currentUserId ? ' (tú)' : ''}
+                {p.name}{p.email ? ` — ${p.email}` : ''}{p.id === currentUserId ? ' (tú)' : ''}
               </option>
             ))}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400 pointer-events-none"/>
         </div>
+        {selectedPlayer?.email && (
+          <p className="text-xs text-zinc-500 mt-2 truncate">
+            Mostrando los pronósticos de <strong className="text-zinc-300">{selectedPlayer.name}</strong>{' '}
+            <span className="text-zinc-600">({selectedPlayer.email})</span>
+          </p>
+        )}
       </div>
 
       {/* Tabs */}
