@@ -43,7 +43,7 @@ export default async function AllPredictionsPage() {
     { data: predictions },
     { data: bonus },
   ] = await Promise.all([
-    supabase.from('profiles').select('id, display_name, email, paid'),
+    supabase.from('profiles').select('id, display_name, full_name, email, paid'),
     supabase.from('match_predictions').select('user_id, match_id, home_score, away_score, winner_team'),
     supabase.from('bonus_predictions').select('user_id, top_scorer, champion'),
   ]);
@@ -53,10 +53,15 @@ export default async function AllPredictionsPage() {
   (predictions ?? []).forEach((p: any) => usersWithPreds.add(p.user_id));
   (bonus ?? []).forEach((b: any) => usersWithPreds.add(b.user_id));
 
-  const playerList = ((profiles ?? []) as Array<{ id: string; display_name: string | null; email: string | null; paid: boolean | null }>)
+  const playerList = ((profiles ?? []) as Array<{ id: string; display_name: string | null; full_name: string | null; email: string | null; paid: boolean | null }>)
     .filter(p => usersWithPreds.has(p.id))
     .filter(p => p.paid === true) // sólo pagados — los que no pagaron no compiten
-    .map(p => ({ id: p.id, name: p.display_name || 'Sin nombre', email: p.email || '' }))
+    .map(p => ({
+      id: p.id,
+      name: p.display_name || 'Sin nombre',
+      fullName: p.full_name || '',
+      email: p.email || '',
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
   // Estructurar predicciones por usuario

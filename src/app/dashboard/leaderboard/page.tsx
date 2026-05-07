@@ -15,7 +15,7 @@ export default async function LeaderboardPage() {
     { data: results },
     { data: settings },
   ] = await Promise.all([
-    supabase.from('profiles').select('id, display_name, email, paid'),
+    supabase.from('profiles').select('id, display_name, full_name, email, paid'),
     supabase.from('match_predictions').select('user_id, match_id, home_score, away_score'),
     supabase.from('bonus_predictions').select('user_id, top_scorer, champion'),
     supabase.from('match_results').select('match_id, home_score, away_score'),
@@ -44,7 +44,7 @@ export default async function LeaderboardPage() {
       settings?.official_top_scorer,
       settings?.official_champion
     );
-    return { id: p.id, name: p.display_name, email: p.email, paid: p.paid, ...breakdown };
+    return { id: p.id, name: p.display_name, fullName: p.full_name, email: p.email, paid: p.paid, ...breakdown };
   }).sort((a,b) => {
     // Orden por total, luego desempates: campeón > goleador > exactos > resultados
     if (b.total !== a.total) return b.total - a.total;
@@ -149,8 +149,13 @@ export default async function LeaderboardPage() {
                       {r.name}
                       {!r.paid && !locked && <span title="No ha pagado" className="w-2 h-2 rounded-full bg-red-500"></span>}
                     </div>
+                    {r.fullName && r.fullName !== r.name && (
+                      <div className="text-[12px] text-zinc-400 mt-0.5 truncate max-w-[260px]" title={r.fullName}>
+                        {r.fullName}
+                      </div>
+                    )}
                     {r.email && (
-                      <div className="text-[11px] text-zinc-500 mt-0.5 truncate max-w-[240px]" title={r.email}>
+                      <div className="text-[11px] text-zinc-500 mt-0.5 truncate max-w-[260px]" title={r.email}>
                         {r.email}
                       </div>
                     )}

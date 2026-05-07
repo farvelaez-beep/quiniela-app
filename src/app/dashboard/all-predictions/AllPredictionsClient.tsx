@@ -15,7 +15,7 @@ export default function AllPredictionsClient({
   currentUserId, players, predsByUser, bonusByUser,
 }: {
   currentUserId: string;
-  players: { id: string; name: string; email: string }[];
+  players: { id: string; name: string; fullName: string; email: string }[];
   predsByUser: PredsByUser;
   bonusByUser: BonusByUser;
 }) {
@@ -58,18 +58,26 @@ export default function AllPredictionsClient({
             onChange={e => setSelectedUserId(e.target.value)}
             className="w-full appearance-none bg-black border border-zinc-700 rounded-xl px-4 py-3 pr-10 text-white text-lg font-bold cursor-pointer hover:border-lime-400 transition"
           >
-            {players.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name}{p.email ? ` — ${p.email}` : ''}{p.id === currentUserId ? ' (tú)' : ''}
-              </option>
-            ))}
+            {players.map(p => {
+              const fullPart = p.fullName && p.fullName !== p.name ? ` (${p.fullName})` : '';
+              const youPart = p.id === currentUserId ? ' — tú' : '';
+              const emailPart = p.email ? ` · ${p.email}` : '';
+              return (
+                <option key={p.id} value={p.id}>
+                  {p.name}{fullPart}{emailPart}{youPart}
+                </option>
+              );
+            })}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400 pointer-events-none"/>
         </div>
-        {selectedPlayer?.email && (
+        {selectedPlayer && (
           <p className="text-xs text-zinc-500 mt-2 truncate">
-            Mostrando los pronósticos de <strong className="text-zinc-300">{selectedPlayer.name}</strong>{' '}
-            <span className="text-zinc-600">({selectedPlayer.email})</span>
+            Mostrando los pronósticos de <strong className="text-zinc-300">{selectedPlayer.name}</strong>
+            {selectedPlayer.fullName && selectedPlayer.fullName !== selectedPlayer.name && (
+              <> <span className="text-zinc-400">— {selectedPlayer.fullName}</span></>
+            )}
+            {selectedPlayer.email && <> <span className="text-zinc-600">({selectedPlayer.email})</span></>}
           </p>
         )}
       </div>
