@@ -129,13 +129,13 @@ export default function RulesPage() {
           <div className="bg-zinc-900 border border-lime-400/30 rounded-lg p-5">
             <div className="text-xs uppercase tracking-wider text-lime-400 font-bold mb-3">Ejemplo de reparto</div>
             <p className="text-sm text-zinc-300 mb-3">
-              50 jugadores pagan <strong className="text-white">$10 USD</strong> cada uno. Pozo total: <strong className="text-lime-400">$500 USD</strong>.
+              50 jugadores pagan <strong className="text-white">$15 USD</strong> cada uno. Pozo total: <strong className="text-lime-400">$750 USD</strong>.
             </p>
             <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between border-b border-zinc-800 pb-1.5"><span className="text-yellow-400">🥇 1° lugar (50%)</span> <strong className="text-white">$250 USD</strong></div>
-              <div className="flex justify-between border-b border-zinc-800 pb-1.5"><span className="text-zinc-300">🥈 2° lugar (25%)</span> <strong className="text-white">$125 USD</strong></div>
-              <div className="flex justify-between border-b border-zinc-800 pb-1.5"><span className="text-orange-400">🥉 3° lugar (10%)</span> <strong className="text-white">$50 USD</strong></div>
-              <div className="flex justify-between"><span className="text-zinc-500">Administración (15%)</span> <strong className="text-zinc-400">$75 USD</strong></div>
+              <div className="flex justify-between border-b border-zinc-800 pb-1.5"><span className="text-yellow-400">🥇 1° lugar (50%)</span> <strong className="text-white">$375 USD</strong></div>
+              <div className="flex justify-between border-b border-zinc-800 pb-1.5"><span className="text-zinc-300">🥈 2° lugar (25%)</span> <strong className="text-white">$187.50 USD</strong></div>
+              <div className="flex justify-between border-b border-zinc-800 pb-1.5"><span className="text-orange-400">🥉 3° lugar (10%)</span> <strong className="text-white">$75 USD</strong></div>
+              <div className="flex justify-between"><span className="text-zinc-500">Administración (15%)</span> <strong className="text-zinc-400">$112.50 USD</strong></div>
             </div>
           </div>
 
