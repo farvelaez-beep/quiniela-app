@@ -149,8 +149,8 @@ export default async function LeaderboardPage() {
                       {r.name}
                       {!r.paid && !locked && <span title="No ha pagado" className="w-2 h-2 rounded-full bg-red-500"></span>}
                     </div>
-                    {r.fullName && r.fullName !== r.name && (
-                      <div className="text-[12px] text-zinc-400 mt-0.5 truncate max-w-[260px]" title={r.fullName}>
+                    {r.fullName && (
+                      <div className="text-[11px] text-zinc-400 font-normal mt-0.5 truncate max-w-[260px]" title={r.fullName}>
                         {r.fullName}
                       </div>
                     )}

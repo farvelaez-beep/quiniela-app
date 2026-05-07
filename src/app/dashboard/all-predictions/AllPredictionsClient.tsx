@@ -74,7 +74,7 @@ export default function AllPredictionsClient({
         {selectedPlayer && (
           <p className="text-xs text-zinc-500 mt-2 truncate">
             Mostrando los pronósticos de <strong className="text-zinc-300">{selectedPlayer.name}</strong>
-            {selectedPlayer.fullName && selectedPlayer.fullName !== selectedPlayer.name && (
+            {selectedPlayer.fullName && (
               <> <span className="text-zinc-400">— {selectedPlayer.fullName}</span></>
             )}
             {selectedPlayer.email && <> <span className="text-zinc-600">({selectedPlayer.email})</span></>}
