@@ -14,7 +14,7 @@ export type TeamStats = {
   points: number;
 };
 
-// Calcula tabla de un grupo aplicando desempates oficiales FIFA.
+// Calcula tabla de un grupo aplicando desempates oficiales FIFA (Art. 13).
 // Si después de todos los criterios calculables aún hay empate, usa userRanking
 // (lista de teams en el orden preferido del usuario o admin) como último desempate.
 export function calculateGroupStandings(
@@ -66,6 +66,7 @@ function sortStandingsFifa(
   return result;
 }
 
+// Calcula h2h (puntos, dg, gf) considerando solo los partidos entre los equipos del subset.
 function computeH2H(
   tied: TeamStats[],
   predictions: Record<string, Score>
@@ -97,20 +98,42 @@ function computeH2H(
   return h2h;
 }
 
-function resolveTie(
+// Aplica criterios FIFA Step 1 (a-c: h2h points, gd, gf) sobre el subset.
+// Retorna los equipos ordenados y los sub-grupos que siguen empatados (misma firma h2h).
+function applyH2H(
   tied: TeamStats[],
-  predictions: Record<string, Score>,
-  userRanking?: string[]
-): TeamStats[] {
+  predictions: Record<string, Score>
+): { ordered: TeamStats[]; tiedSubRuns: TeamStats[][] } {
   const h2h = computeH2H(tied, predictions);
-  return [...tied].sort((a, b) => {
+  const ordered = [...tied].sort((a, b) => {
     const ha = h2h[a.team]; const hb = h2h[b.team];
     if (hb.points !== ha.points) return hb.points - ha.points;
     if (hb.gd !== ha.gd) return hb.gd - ha.gd;
-    if (hb.gf !== ha.gf) return hb.gf - ha.gf;
+    return hb.gf - ha.gf;
+  });
+  const tiedSubRuns: TeamStats[][] = [];
+  let i = 0;
+  while (i < ordered.length) {
+    let j = i + 1;
+    while (j < ordered.length) {
+      const ha = h2h[ordered[i].team];
+      const hb = h2h[ordered[j].team];
+      if (ha.points !== hb.points || ha.gd !== hb.gd || ha.gf !== hb.gf) break;
+      j++;
+    }
+    if (j - i > 1) tiedSubRuns.push(ordered.slice(i, j));
+    i = j;
+  }
+  return { ordered, tiedSubRuns };
+}
+
+function resolveByGlobal(
+  tied: TeamStats[],
+  userRanking?: string[]
+): TeamStats[] {
+  return [...tied].sort((a, b) => {
     if (b.gd !== a.gd) return b.gd - a.gd;
     if (b.gf !== a.gf) return b.gf - a.gf;
-    // Sigue empate → usar ranking del usuario/admin si existe
     if (userRanking) {
       const aIdx = userRanking.indexOf(a.team);
       const bIdx = userRanking.indexOf(b.team);
@@ -120,41 +143,136 @@ function resolveTie(
   });
 }
 
-// Detecta empates que ningún criterio calculable resuelve.
-// Devuelve los subgrupos de equipos (códigos) que quedan empatados después de FIFA.
+// FIFA Art. 13:
+//   Step 1 (a-c): h2h points -> h2h gd -> h2h gf  sobre el subset original
+//   Step 2 (re-aplicacion): si despues del Step 1 quedan sub-grupos empatados Y el sub-grupo
+//                           se redujo respecto al original, RE-aplicar a-c solo entre ellos
+//   Step 2 (d-e):  gd global -> gf global  para lo que siga empatado
+//   Ultimo recurso (no FIFA, pero para evitar empate en la app): userRanking -> alfabetico
+function resolveTie(
+  tied: TeamStats[],
+  predictions: Record<string, Score>,
+  userRanking?: string[]
+): TeamStats[] {
+  const pass1 = applyH2H(tied, predictions);
+  if (pass1.tiedSubRuns.length === 0) return pass1.ordered;
+
+  const result: TeamStats[] = [];
+  let i = 0;
+  while (i < pass1.ordered.length) {
+    const subRun = pass1.tiedSubRuns.find(sr => sr.includes(pass1.ordered[i]));
+    if (!subRun) {
+      result.push(pass1.ordered[i]);
+      i++;
+      continue;
+    }
+    result.push(...resolveSubRun(subRun, tied.length, predictions, userRanking));
+    i += subRun.length;
+  }
+  return result;
+}
+
+function resolveSubRun(
+  subRun: TeamStats[],
+  originalSubsetSize: number,
+  predictions: Record<string, Score>,
+  userRanking?: string[]
+): TeamStats[] {
+  let afterH2H: TeamStats[];
+  let stillTied: TeamStats[][];
+
+  if (subRun.length < originalSubsetSize) {
+    // Se redujo: FIFA exige re-aplicar a-c solo entre los que quedan empatados.
+    const pass2 = applyH2H(subRun, predictions);
+    afterH2H = pass2.ordered;
+    stillTied = pass2.tiedSubRuns;
+  } else {
+    // No se redujo: re-aplicar h2h daria exactamente el mismo resultado.
+    // Pasar directo a global gd/gf.
+    afterH2H = [...subRun];
+    stillTied = [subRun];
+  }
+
+  const result: TeamStats[] = [];
+  let i = 0;
+  while (i < afterH2H.length) {
+    const subSub = stillTied.find(sr => sr.includes(afterH2H[i]));
+    if (!subSub) {
+      result.push(afterH2H[i]);
+      i++;
+      continue;
+    }
+    result.push(...resolveByGlobal(subSub, userRanking));
+    i += subSub.length;
+  }
+  return result;
+}
+
+// Detecta empates que ningun criterio calculable resuelve.
+// Usa la misma logica FIFA completa (h2h doble + global gd/gf) que calculateGroupStandings.
+// Devuelve los subgrupos de equipos (codigos) que quedan empatados despues de todo.
 export function detectUnbreakableTies(
   groupKey: string,
   predictions: Record<string, Score>
 ): string[][] {
   const teams = GROUPS[groupKey] ?? [];
   const groupMatches = ALL_MATCHES.filter(m => m.group === groupKey);
-  // Solo si hay 6 partidos predichos completos
   const allFilled = groupMatches.every(m => {
     const p = predictions[m.id];
     return p && typeof p.home_score === 'number' && typeof p.away_score === 'number';
   });
   if (!allFilled || teams.length === 0) return [];
 
-  // Calcular tabla SIN ranking (para detectar empates "puros")
-  const standings = calculateGroupStandings(groupKey, predictions);
+  // Construir stats
+  const stats: Record<string, TeamStats> = {};
+  teams.forEach(t => {
+    stats[t] = { team: t, played: 0, won: 0, drawn: 0, lost: 0, gf: 0, ga: 0, gd: 0, points: 0 };
+  });
+  for (const m of groupMatches) {
+    const p = predictions[m.id];
+    if (!p) continue;
+    const home = stats[m.home]; const away = stats[m.away];
+    home.played++; away.played++;
+    home.gf += p.home_score; home.ga += p.away_score;
+    away.gf += p.away_score; away.ga += p.home_score;
+    if (p.home_score > p.away_score) { home.won++; away.lost++; home.points += 3; }
+    else if (p.home_score < p.away_score) { away.won++; home.lost++; away.points += 3; }
+    else { home.drawn++; away.drawn++; home.points += 1; away.points += 1; }
+  }
+  Object.values(stats).forEach(s => { s.gd = s.gf - s.ga; });
+
   const result: string[][] = [];
+  const byPoints = Object.values(stats).sort((a, b) => b.points - a.points);
   let i = 0;
-  while (i < standings.length) {
+  while (i < byPoints.length) {
     let j = i + 1;
-    while (j < standings.length && standings[j].points === standings[i].points) j++;
-    // Subgrupo empatado en puntos: standings[i..j)
+    while (j < byPoints.length && byPoints[j].points === byPoints[i].points) j++;
     if (j - i > 1) {
-      const sub = standings.slice(i, j);
-      const h2h = computeH2H(sub, predictions);
-      // Dentro del subgrupo, encontrar sub-runs con fingerprint idéntico
-      const fp = (t: TeamStats) =>
-        `${h2h[t.team].points}-${h2h[t.team].gd}-${h2h[t.team].gf}-${t.gd}-${t.gf}`;
-      let a = 0;
-      while (a < sub.length) {
-        let b = a + 1;
-        while (b < sub.length && fp(sub[a]) === fp(sub[b])) b++;
-        if (b - a > 1) result.push(sub.slice(a, b).map(s => s.team));
-        a = b;
+      const subset = byPoints.slice(i, j);
+      const pass1 = applyH2H(subset, predictions);
+      for (const subRun of pass1.tiedSubRuns) {
+        let stillTied: TeamStats[][];
+        if (subRun.length < subset.length) {
+          const pass2 = applyH2H(subRun, predictions);
+          stillTied = pass2.tiedSubRuns;
+        } else {
+          stillTied = [subRun];
+        }
+        for (const subSub of stillTied) {
+          const sortedGlobal = [...subSub].sort((a, b) => {
+            if (b.gd !== a.gd) return b.gd - a.gd;
+            return b.gf - a.gf;
+          });
+          let k = 0;
+          while (k < sortedGlobal.length) {
+            let l = k + 1;
+            while (l < sortedGlobal.length &&
+                   sortedGlobal[k].gd === sortedGlobal[l].gd &&
+                   sortedGlobal[k].gf === sortedGlobal[l].gf) l++;
+            if (l - k > 1) result.push(sortedGlobal.slice(k, l).map(s => s.team));
+            k = l;
+          }
+        }
       }
     }
     i = j;
@@ -162,10 +280,10 @@ export function detectUnbreakableTies(
   return result;
 }
 
-// Top 8 mejores 3ros lugares según FIFA: pts → DG → GF → fair play → sorteo
+// Top 8 mejores 3ros lugares segun FIFA: pts -> DG -> GF -> ranking manual -> alfabetico
 export function calculateBestThirdPlaces(
   predictions: Record<string, Score>,
-  thirdsRanking?: string[] // ranking del usuario/admin como último desempate entre 3ros
+  thirdsRanking?: string[]
 ): TeamStats[] {
   const allThird: (TeamStats & { group: string })[] = [];
   for (const groupKey of Object.keys(GROUPS)) {
