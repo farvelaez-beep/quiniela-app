@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import KnockoutClient from './KnockoutClient';
 import { calculateBestThirdPlaces, bestThirdPlacesByGroup } from '@/lib/standings';
+import { isEffectivelyLocked } from '@/lib/lock';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ export default async function KnockoutPage() {
       .select('match_id, home_score, away_score, winner_team')
       .eq('user_id', user.id),
     supabase.from('match_results').select('match_id, home_score, away_score'),
-    supabase.from('tournament_settings').select('is_locked').eq('id', 1).single(),
+    supabase.from('tournament_settings').select('is_locked, lock_at').eq('id', 1).single(),
   ]);
 
   const groupPreds: Record<string, { home_score: number; away_score: number }> = {};
@@ -54,7 +55,7 @@ export default async function KnockoutPage() {
       top8Thirds={top8Thirds.map(t => t.team)}
       thirdsByGroup={thirdsByGroup}
       results={resultsMap}
-      isLocked={settings?.is_locked ?? false}
+      isLocked={isEffectivelyLocked(settings)}
     />
   );
 }

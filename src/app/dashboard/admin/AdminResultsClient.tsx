@@ -2,18 +2,20 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Save, Loader2, Lock, Unlock, Check, Trophy, Star, AlertTriangle, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Save, Loader2, Lock, Unlock, Check, Trophy, Star, AlertTriangle, ArrowUp, ArrowDown, Trash2, Calendar } from 'lucide-react';
 import { GROUPS, ALL_MATCHES, ALL_TEAMS, TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { createClient } from '@/lib/supabase/client';
 import { calculateGroupStandings, calculateBestThirdPlaces, detectUnbreakableTies, type TeamStats } from '@/lib/standings';
+import { formatLockAtMedellin, isEffectivelyLocked } from '@/lib/lock';
 
 type Score = { home_score: number | ''; away_score: number | '' };
 
 export default function AdminResultsClient({
-  initialResults, initialLocked, initialTopScorer, initialChampion, initialTiebreakers,
+  initialResults, initialLocked, initialLockAt, initialTopScorer, initialChampion, initialTiebreakers,
 }: {
   initialResults: Record<string, { home_score: number; away_score: number }>;
   initialLocked: boolean;
+  initialLockAt: string | null;
   initialTopScorer: string;
   initialChampion: string;
   initialTiebreakers: Record<string, string[]>;
@@ -28,6 +30,8 @@ export default function AdminResultsClient({
   const [topScorer, setTopScorer] = useState(initialTopScorer);
   const [champion, setChampion] = useState(initialChampion);
   const [locked, setLocked] = useState(initialLocked);
+  const [lockAt, setLockAt] = useState<string | null>(initialLockAt);
+  const [savingLockAt, setSavingLockAt] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>('A');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -36,6 +40,60 @@ export default function AdminResultsClient({
   const [clearing, setClearing] = useState(false);
   // IDs que ya estaban guardados al cargar la página - para detectar borrados al guardar
   const [persistedIds] = useState<Set<string>>(() => new Set(Object.keys(initialResults)));
+
+  // Auto-lock por fecha: si pasó la fecha lock_at, considerar bloqueada
+  const effectivelyLocked = useMemo(
+    () => isEffectivelyLocked({ is_locked: locked, lock_at: lockAt }),
+    [locked, lockAt]
+  );
+
+  // Convierte una fecha ISO UTC a string compatible con <input type="datetime-local"> en hora Medellín
+  const toMedellinInputValue = (iso: string | null): string => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    // Medellín = UTC-5
+    const med = new Date(d.getTime() - 5 * 60 * 60 * 1000);
+    const yyyy = med.getUTCFullYear();
+    const mm = String(med.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(med.getUTCDate()).padStart(2, '0');
+    const hh = String(med.getUTCHours()).padStart(2, '0');
+    const mi = String(med.getUTCMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  };
+
+  // Convierte un string del input (interpretado como hora Medellín) a ISO UTC
+  const fromMedellinInputValue = (val: string): string | null => {
+    if (!val) return null;
+    // val es "YYYY-MM-DDTHH:MM" — lo interpretamos como hora Medellín (UTC-5)
+    // y devolvemos el ISO UTC equivalente
+    const [datePart, timePart] = val.split('T');
+    const [y, m, d] = datePart.split('-').map(Number);
+    const [hh, mm] = timePart.split(':').map(Number);
+    // Construir Date como si fuera UTC, luego sumar 5h para obtener el UTC real
+    const asIfUtc = Date.UTC(y, m - 1, d, hh, mm);
+    const utcMs = asIfUtc + 5 * 60 * 60 * 1000;
+    return new Date(utcMs).toISOString();
+  };
+
+  const saveLockAt = async (newValue: string) => {
+    setSavingLockAt(true);
+    const supabase = createClient();
+    const isoUtc = fromMedellinInputValue(newValue);
+    await supabase.from('tournament_settings').update({ lock_at: isoUtc }).eq('id', 1);
+    setLockAt(isoUtc);
+    setSavingLockAt(false);
+    router.refresh();
+  };
+
+  const clearLockAt = async () => {
+    if (!confirm('¿Quitar el bloqueo automático? La quiniela solo se bloqueará cuando le des al botón manual.')) return;
+    setSavingLockAt(true);
+    const supabase = createClient();
+    await supabase.from('tournament_settings').update({ lock_at: null }).eq('id', 1);
+    setLockAt(null);
+    setSavingLockAt(false);
+    router.refresh();
+  };
 
   const updateMatch = (id: string, side: 'home_score'|'away_score', val: string) => {
     if (val !== '' && (isNaN(+val) || +val < 0 || +val > 30)) return;
@@ -182,6 +240,47 @@ export default function AdminResultsClient({
             {togglingLock ? <Loader2 className="w-4 h-4 animate-spin"/> : (locked ? <Lock className="w-4 h-4"/> : <Unlock className="w-4 h-4"/>)}
             {locked ? 'Bloqueado' : 'Bloquear quiniela'}
           </button>
+        </div>
+      </div>
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-4">
+        <div className="flex items-start gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Calendar className="w-5 h-5 text-lime-400"/>
+            <span className="font-display text-xl text-white">BLOQUEO AUTOMÁTICO</span>
+          </div>
+          <div className="flex-1 min-w-[280px]">
+            <label className="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-1 block">
+              Fecha y hora (Medellín, UTC-5)
+            </label>
+            <div className="flex gap-2 items-center flex-wrap">
+              <input
+                type="datetime-local"
+                value={toMedellinInputValue(lockAt)}
+                onChange={e => saveLockAt(e.target.value)}
+                disabled={savingLockAt || locked}
+                className="bg-black border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm flex-1 min-w-[200px] disabled:opacity-50"
+              />
+              {savingLockAt && <Loader2 className="w-4 h-4 animate-spin text-zinc-400"/>}
+              {lockAt && !locked && (
+                <button onClick={clearLockAt} disabled={savingLockAt}
+                  className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50">
+                  Quitar
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-zinc-500 mt-1.5">
+              {lockAt && !locked && (
+                <>La quiniela se bloqueará automáticamente el <strong className="text-zinc-300">{formatLockAtMedellin(lockAt)}</strong> hora Medellín.</>
+              )}
+              {!lockAt && !locked && (
+                <>Sin bloqueo automático. Solo se bloqueará si presionas el botón manualmente.</>
+              )}
+              {locked && (
+                <>La quiniela está bloqueada manualmente. La fecha automática queda inhabilitada.</>
+              )}
+            </p>
+          </div>
         </div>
       </div>
 

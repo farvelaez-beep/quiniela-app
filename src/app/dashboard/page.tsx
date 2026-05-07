@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import GroupStageClient from './GroupStageClient';
+import { isEffectivelyLocked } from '@/lib/lock';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ export default async function DashboardPage() {
       .select('match_id, home_score, away_score')
       .eq('user_id', user!.id),
     supabase.from('match_results').select('match_id, home_score, away_score'),
-    supabase.from('tournament_settings').select('is_locked').eq('id', 1).single(),
+    supabase.from('tournament_settings').select('is_locked, lock_at').eq('id', 1).single(),
     supabase.from('user_group_tiebreaker').select('group_key, ranking').eq('user_id', user!.id),
     supabase.from('official_group_tiebreaker').select('group_key, ranking'),
   ]);
@@ -43,7 +44,7 @@ export default async function DashboardPage() {
     <GroupStageClient
       initialPredictions={predMap}
       results={resultsMap}
-      locked={settings?.is_locked ?? false}
+      locked={isEffectivelyLocked(settings)}
       userId={user!.id}
       userTiebreakers={userTbMap}
       officialTiebreakers={officialTbMap}

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import BonusClient from './BonusClient';
+import { isEffectivelyLocked } from '@/lib/lock';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,14 +16,14 @@ export default async function BonusPage() {
 
   const { data: settings } = await supabase
     .from('tournament_settings')
-    .select('is_locked, official_top_scorer, official_champion')
+    .select('is_locked, lock_at, official_top_scorer, official_champion')
     .eq('id', 1)
     .single();
 
   return (
     <BonusClient
       initial={{ top_scorer: bonus?.top_scorer ?? '', champion: bonus?.champion ?? '' }}
-      locked={settings?.is_locked ?? false}
+      locked={isEffectivelyLocked(settings)}
       userId={user!.id}
       officialTopScorer={settings?.official_top_scorer ?? null}
       officialChampion={settings?.official_champion ?? null}
