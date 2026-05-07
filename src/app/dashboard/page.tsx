@@ -11,12 +11,16 @@ export default async function DashboardPage() {
     { data: predictions },
     { data: results },
     { data: settings },
+    { data: userTiebreakers },
+    { data: officialTiebreakers },
   ] = await Promise.all([
     supabase.from('match_predictions')
       .select('match_id, home_score, away_score')
       .eq('user_id', user!.id),
     supabase.from('match_results').select('match_id, home_score, away_score'),
     supabase.from('tournament_settings').select('is_locked').eq('id', 1).single(),
+    supabase.from('user_group_tiebreaker').select('group_key, ranking').eq('user_id', user!.id),
+    supabase.from('official_group_tiebreaker').select('group_key, ranking'),
   ]);
 
   const predMap: Record<string, { home_score: number; away_score: number }> = {};
@@ -29,12 +33,20 @@ export default async function DashboardPage() {
     resultsMap[r.match_id] = { home_score: r.home_score, away_score: r.away_score };
   });
 
+  const userTbMap: Record<string, string[]> = {};
+  (userTiebreakers ?? []).forEach((t: any) => { userTbMap[t.group_key] = t.ranking as string[]; });
+
+  const officialTbMap: Record<string, string[]> = {};
+  (officialTiebreakers ?? []).forEach((t: any) => { officialTbMap[t.group_key] = t.ranking as string[]; });
+
   return (
     <GroupStageClient
       initialPredictions={predMap}
       results={resultsMap}
       locked={settings?.is_locked ?? false}
       userId={user!.id}
+      userTiebreakers={userTbMap}
+      officialTiebreakers={officialTbMap}
     />
   );
 }

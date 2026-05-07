@@ -59,8 +59,8 @@ export default function RulesPage() {
           </p>
         </Section>
 
-        {/* SECCIÓN 3: Desempate */}
-        <Section icon={<ListChecks className="w-5 h-5"/>} title="Reglas de desempate">
+        {/* SECCIÓN: Desempate entre jugadores */}
+        <Section icon={<ListChecks className="w-5 h-5"/>} title="Reglas de desempate (entre jugadores)">
           <p className="text-zinc-300 mb-4 text-sm">
             Si dos o más jugadores terminan empatados en puntos al final del torneo, los desempates se aplican <strong className="text-white">en este orden</strong>:
           </p>
@@ -86,6 +86,32 @@ export default function RulesPage() {
               <div><strong className="text-white">Reparto en partes iguales.</strong> Si todavía hay empate, el premio del puesto se reparte equitativamente entre los jugadores empatados.</div>
             </li>
           </ol>
+        </Section>
+
+        {/* SECCIÓN: Desempate dentro de un grupo (FIFA) */}
+        <Section icon={<ListChecks className="w-5 h-5"/>} title="Desempate dentro de un grupo (reglamento FIFA)">
+          <p className="text-zinc-300 mb-4 text-sm">
+            Las tablas de grupos en esta quiniela siguen el reglamento oficial FIFA. Si dos o más selecciones terminan empatadas en puntos, se aplican <strong className="text-white">en este orden</strong>:
+          </p>
+          <ol className="space-y-2 text-zinc-300 text-sm">
+            <li className="flex gap-3">
+              <span className="font-display text-2xl text-lime-400 leading-none w-8 flex-shrink-0">1.</span>
+              <div><strong className="text-white">Cabeza a cabeza.</strong> Entre los empatados: puntos en sus partidos directos, luego diferencia de goles directa, luego goles a favor directos.</div>
+            </li>
+            <li className="flex gap-3">
+              <span className="font-display text-2xl text-lime-400 leading-none w-8 flex-shrink-0">2.</span>
+              <div><strong className="text-white">Tablas globales.</strong> Si sigue el empate: diferencia de goles total y goles a favor totales del grupo.</div>
+            </li>
+            <li className="flex gap-3">
+              <span className="font-display text-2xl text-lime-400 leading-none w-8 flex-shrink-0">3.</span>
+              <div>
+                <strong className="text-white">Si TODO sigue empatado.</strong> En la realidad FIFA seguiría con fair play (tarjetas), ranking FIFA y sorteo. Como en una quiniela no se predicen tarjetas y el ranking/sorteo no son determinísticos, el sistema te avisa y te pide que <strong className="text-yellow-400">predigas el orden</strong> que crees que pondrá FIFA. El admin hace lo mismo con el resultado oficial cuando se den los resultados reales. Así nadie queda con una tabla determinada por un fallback alfabético.
+              </div>
+            </li>
+          </ol>
+          <p className="text-xs text-zinc-500 mt-3">
+            El mismo criterio se aplica para elegir los <strong>8 mejores 3ros lugares</strong>, excepto que como vienen de distintos grupos no hay cabeza a cabeza: solo puntos → diferencia de goles → goles a favor.
+          </p>
         </Section>
 
         {/* SECCIÓN 4: Premios */}

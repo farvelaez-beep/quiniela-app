@@ -1,19 +1,22 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Save, Loader2, Lock, Unlock, Check, Trophy, Star } from 'lucide-react';
+import { ChevronDown, ChevronRight, Save, Loader2, Lock, Unlock, Check, Trophy, Star, AlertTriangle, ArrowUp, ArrowDown } from 'lucide-react';
 import { GROUPS, ALL_MATCHES, ALL_TEAMS, TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { createClient } from '@/lib/supabase/client';
-import { calculateGroupStandings, calculateBestThirdPlaces, type TeamStats } from '@/lib/standings';
+import { calculateGroupStandings, calculateBestThirdPlaces, detectUnbreakableTies, type TeamStats } from '@/lib/standings';
 
 type Score = { home_score: number | ''; away_score: number | '' };
 
 export default function AdminResultsClient({
-  initialResults, initialLocked, initialTopScorer, initialChampion,
+  initialResults, initialLocked, initialTopScorer, initialChampion, initialTiebreakers,
 }: {
   initialResults: Record<string, { home_score: number; away_score: number }>;
-  initialLocked: boolean; initialTopScorer: string; initialChampion: string;
+  initialLocked: boolean;
+  initialTopScorer: string;
+  initialChampion: string;
+  initialTiebreakers: Record<string, string[]>;
 }) {
   const router = useRouter();
   const [results, setResults] = useState<Record<string, Score>>(() => {
@@ -21,6 +24,7 @@ export default function AdminResultsClient({
     Object.entries(initialResults).forEach(([k, v]) => { m[k] = v; });
     return m;
   });
+  const [tiebreakers, setTiebreakers] = useState<Record<string, string[]>>(initialTiebreakers);
   const [topScorer, setTopScorer] = useState(initialTopScorer);
   const [champion, setChampion] = useState(initialChampion);
   const [locked, setLocked] = useState(initialLocked);
@@ -37,6 +41,16 @@ export default function AdminResultsClient({
     setDirty(true);
   };
 
+  const moveTiebreaker = (groupKey: string, idx: number, dir: -1 | 1) => {
+    const current = tiebreakers[groupKey] ?? [];
+    const newPos = idx + dir;
+    if (newPos < 0 || newPos >= current.length) return;
+    const next = [...current];
+    [next[idx], next[newPos]] = [next[newPos], next[idx]];
+    setTiebreakers({ ...tiebreakers, [groupKey]: next });
+    setDirty(true);
+  };
+
   const save = async () => {
     setSaving(true);
     const supabase = createClient();
@@ -50,6 +64,14 @@ export default function AdminResultsClient({
       official_top_scorer: topScorer.trim() || null,
       official_champion: champion || null,
     }).eq('id', 1);
+
+    const tbRows = Object.entries(tiebreakers)
+      .filter(([_, ranking]) => ranking && ranking.length > 0)
+      .map(([group_key, ranking]) => ({ group_key, ranking }));
+    if (tbRows.length > 0) {
+      await supabase.from('official_group_tiebreaker').upsert(tbRows, { onConflict: 'group_key' });
+    }
+
     setSaving(false);
     setDirty(false);
     setSavedAt(Date.now());
@@ -69,7 +91,6 @@ export default function AdminResultsClient({
 
   const sortedTeams = [...ALL_TEAMS].sort((a,b) => TEAMS_ES[a].localeCompare(TEAMS_ES[b]));
 
-  // Resultados limpios para calcular tablas
   const cleanResults = useMemo(() => {
     const m: Record<string, { home_score: number; away_score: number }> = {};
     Object.entries(results).forEach(([k, v]) => {
@@ -85,6 +106,26 @@ export default function AdminResultsClient({
     calculateBestThirdPlaces(cleanResults).forEach(t => set.add(t.team));
     return set;
   }, [cleanResults]);
+
+  const tiesPerGroup = useMemo(() => {
+    const map: Record<string, string[][]> = {};
+    Object.keys(GROUPS).forEach(g => {
+      map[g] = detectUnbreakableTies(g, cleanResults);
+    });
+    return map;
+  }, [cleanResults]);
+
+  // Inicializar tiebreakers default cuando se detecta empate sin ranking
+  useEffect(() => {
+    Object.entries(tiesPerGroup).forEach(([gKey, tieGroups]) => {
+      if (tieGroups.length > 0 && !tiebreakers[gKey]) {
+        const standings = calculateGroupStandings(gKey, cleanResults);
+        const initial = standings.map(s => s.team);
+        setTiebreakers(prev => ({ ...prev, [gKey]: initial }));
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiesPerGroup]);
 
   return (
     <div>
@@ -106,8 +147,7 @@ export default function AdminResultsClient({
         <div>
           <label className="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-1 block">Goleador oficial</label>
           <input value={topScorer} onChange={e=>{setTopScorer(e.target.value); setDirty(true)}}
-            className="w-full bg-black border border-zinc-700 rounded-lg px-4 py-2.5 text-white"
-            placeholder="Nombre exacto" />
+            className="w-full bg-black border border-zinc-700 rounded-lg px-4 py-2.5 text-white" placeholder="Nombre exacto" />
         </div>
         <div>
           <label className="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-1 block">Campeón oficial</label>
@@ -126,7 +166,12 @@ export default function AdminResultsClient({
             const r = results[m.id]; return r && r.home_score !== '' && r.away_score !== '';
           }).length;
           const isOpen = openGroup === gKey;
-          const officialStandings = filled === 6 ? calculateGroupStandings(gKey, cleanResults) : null;
+          const ranking = tiebreakers[gKey];
+          const officialStandings = filled === 6
+            ? calculateGroupStandings(gKey, cleanResults, ranking)
+            : null;
+          const tiedSubgroups = tiesPerGroup[gKey] ?? [];
+          const hasUnbreakableTie = tiedSubgroups.length > 0;
 
           return (
             <div key={gKey} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
@@ -135,6 +180,11 @@ export default function AdminResultsClient({
                 <div className="flex items-center gap-4">
                   <div className="font-display text-3xl text-lime-400 leading-none">GRUPO {gKey}</div>
                   <div className="text-xs text-zinc-500 uppercase font-bold">{filled}/6 cargados</div>
+                  {hasUnbreakableTie && (
+                    <span className="text-yellow-400 text-xs flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5"/>Definir orden
+                    </span>
+                  )}
                 </div>
                 {isOpen ? <ChevronDown className="w-5 h-5"/> : <ChevronRight className="w-5 h-5"/>}
               </button>
@@ -165,12 +215,53 @@ export default function AdminResultsClient({
                     );
                   })}
 
+                  {/* Desempate manual oficial */}
+                  {officialStandings && hasUnbreakableTie && (
+                    <div className="mt-4 pt-4 border-t border-yellow-500/30 bg-yellow-500/5 -mx-4 px-4 pb-4 rounded-b-xl">
+                      <div className="flex items-start gap-2 mb-3">
+                        <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5"/>
+                        <div>
+                          <div className="text-yellow-400 font-bold text-sm">Empate sin resolver con criterios calculables</div>
+                          <div className="text-xs text-zinc-400 mt-1">
+                            Los equipos abajo están empatados después de aplicar puntos, cabeza-a-cabeza y diferencia/goles globales. <strong className="text-zinc-300">Asigna el orden según la decisión oficial FIFA</strong> (fair play, ranking o sorteo). Esto define la tabla oficial.
+                          </div>
+                        </div>
+                      </div>
+                      {tiedSubgroups.map((sub, sIdx) => (
+                        <div key={sIdx} className="mb-3 last:mb-0">
+                          <div className="text-[11px] uppercase tracking-wider text-zinc-500 font-bold mb-1.5">
+                            Empate #{sIdx + 1}: {sub.length} equipos
+                          </div>
+                          {(ranking ?? []).filter(t => sub.includes(t)).map((team, idx, arr) => {
+                            const fullIdx = (ranking ?? []).indexOf(team);
+                            return (
+                              <div key={team} className="flex items-center gap-2 bg-black/40 rounded p-2 mb-1.5">
+                                <span className="font-display text-lg text-lime-400 w-8">
+                                  {(officialStandings.findIndex(s => s.team === team) + 1)}°
+                                </span>
+                                <span className="text-xl">{FLAG[team]}</span>
+                                <span className="font-medium flex-1">{TEAMS_ES[team]}</span>
+                                <button onClick={() => moveTiebreaker(gKey, fullIdx, -1)} disabled={idx === 0}
+                                  className="p-1.5 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed">
+                                  <ArrowUp className="w-3.5 h-3.5"/>
+                                </button>
+                                <button onClick={() => moveTiebreaker(gKey, fullIdx, 1)} disabled={idx === arr.length - 1}
+                                  className="p-1.5 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed">
+                                  <ArrowDown className="w-3.5 h-3.5"/>
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Tabla oficial calculada */}
                   {officialStandings && (
                     <div className="mt-4 pt-4 border-t border-zinc-800">
                       <div className="text-xs uppercase tracking-wider text-zinc-500 font-bold mb-3 flex items-center gap-2">
-                        <Trophy className="w-3.5 h-3.5 text-yellow-400"/>
-                        Tabla oficial (calculada de los resultados cargados)
+                        <Trophy className="w-3.5 h-3.5 text-yellow-400"/>Tabla oficial (calculada)
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs min-w-[480px]">
@@ -220,10 +311,6 @@ export default function AdminResultsClient({
                             })}
                           </tbody>
                         </table>
-                      </div>
-                      <div className="text-[10px] text-zinc-600 mt-2 flex flex-wrap gap-3">
-                        <span><Star className="w-2.5 h-2.5 inline text-lime-400 fill-lime-400 mr-0.5"/>Clasifica directo</span>
-                        <span><Star className="w-2.5 h-2.5 inline text-yellow-400 fill-yellow-400 mr-0.5"/>Clasifica como mejor 3°</span>
                       </div>
                     </div>
                   )}
