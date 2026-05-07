@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Save, Loader2, Lock, Unlock, Check, Trophy, Star, AlertTriangle, ArrowUp, ArrowDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, Save, Loader2, Lock, Unlock, Check, Trophy, Star, AlertTriangle, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { GROUPS, ALL_MATCHES, ALL_TEAMS, TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { createClient } from '@/lib/supabase/client';
 import { calculateGroupStandings, calculateBestThirdPlaces, detectUnbreakableTies, type TeamStats } from '@/lib/standings';
@@ -33,6 +33,9 @@ export default function AdminResultsClient({
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [togglingLock, setTogglingLock] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  // IDs que ya estaban guardados al cargar la página - para detectar borrados al guardar
+  const [persistedIds] = useState<Set<string>>(() => new Set(Object.keys(initialResults)));
 
   const updateMatch = (id: string, side: 'home_score'|'away_score', val: string) => {
     if (val !== '' && (isNaN(+val) || +val < 0 || +val > 30)) return;
@@ -60,6 +63,14 @@ export default function AdminResultsClient({
     if (rows.length > 0) {
       await supabase.from('match_results').upsert(rows, { onConflict: 'match_id' });
     }
+
+    // Detectar partidos que estaban guardados pero ahora se vaciaron -> borrarlos
+    const filledIds = new Set(rows.map(r => r.match_id));
+    const idsToDelete = Array.from(persistedIds).filter(id => !filledIds.has(id));
+    if (idsToDelete.length > 0) {
+      await supabase.from('match_results').delete().in('match_id', idsToDelete);
+    }
+
     await supabase.from('tournament_settings').update({
       official_top_scorer: topScorer.trim() || null,
       official_champion: champion || null,
@@ -74,6 +85,30 @@ export default function AdminResultsClient({
 
     setSaving(false);
     setDirty(false);
+    setSavedAt(Date.now());
+    setTimeout(() => setSavedAt(null), 2000);
+    router.refresh();
+  };
+
+  const clearAll = async () => {
+    const ok = window.confirm(
+      'Vas a borrar TODOS los resultados oficiales: marcadores, goleador, campeón y desempates manuales. Esta acción no se puede deshacer. ¿Continuar?'
+    );
+    if (!ok) return;
+    setClearing(true);
+    const supabase = createClient();
+    await supabase.from('match_results').delete().neq('match_id', '__sentinel__');
+    await supabase.from('official_group_tiebreaker').delete().neq('group_key', '__sentinel__');
+    await supabase.from('tournament_settings').update({
+      official_top_scorer: null,
+      official_champion: null,
+    }).eq('id', 1);
+    setResults({});
+    setTiebreakers({});
+    setTopScorer('');
+    setChampion('');
+    setDirty(false);
+    setClearing(false);
     setSavedAt(Date.now());
     setTimeout(() => setSavedAt(null), 2000);
     router.refresh();
@@ -134,13 +169,20 @@ export default function AdminResultsClient({
           <h2 className="font-display text-5xl leading-none">RESULTADOS OFICIALES</h2>
           <p className="text-zinc-400 text-sm mt-1">Carga los marcadores reales para que se calculen los puntos</p>
         </div>
-        <button onClick={toggleLock} disabled={togglingLock}
-          className={`px-4 py-2 rounded-lg font-bold uppercase text-sm flex items-center gap-2 disabled:opacity-50 ${
-            locked ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-white hover:bg-zinc-700'
-          }`}>
-          {togglingLock ? <Loader2 className="w-4 h-4 animate-spin"/> : (locked ? <Lock className="w-4 h-4"/> : <Unlock className="w-4 h-4"/>)}
-          {locked ? 'Bloqueado' : 'Bloquear quiniela'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={clearAll} disabled={clearing}
+            className="px-4 py-2 rounded-lg font-bold uppercase text-sm flex items-center gap-2 bg-red-900/40 text-red-300 border border-red-800 hover:bg-red-900/60 disabled:opacity-50">
+            {clearing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Trash2 className="w-4 h-4"/>}
+            Borrar todo
+          </button>
+          <button onClick={toggleLock} disabled={togglingLock}
+            className={`px-4 py-2 rounded-lg font-bold uppercase text-sm flex items-center gap-2 disabled:opacity-50 ${
+              locked ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-white hover:bg-zinc-700'
+            }`}>
+            {togglingLock ? <Loader2 className="w-4 h-4 animate-spin"/> : (locked ? <Lock className="w-4 h-4"/> : <Unlock className="w-4 h-4"/>)}
+            {locked ? 'Bloqueado' : 'Bloquear quiniela'}
+          </button>
+        </div>
       </div>
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-4 grid md:grid-cols-2 gap-4">
