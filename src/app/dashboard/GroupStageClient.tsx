@@ -106,7 +106,7 @@ export default function GroupStageClient({
       <div className="flex items-end justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 className="font-display text-5xl leading-none">FASE DE GRUPOS</h2>
-          <p className="text-zinc-400 text-sm mt-1">72 partidos · Marcador exacto = 3 pts · Resultado = 1 pt · Posición correcta en grupo = +1 pt c/u</p>
+          <p className="text-zinc-400 text-sm mt-1">72 partidos · Marcador exacto = 3 pts · Resultado = 1 pt · Acertar 1° o 2° del grupo = +1 pt c/u</p>
         </div>
         <div className="flex items-center gap-4">
           {(pointsTotal + totalPositionBonus) > 0 && (
@@ -319,7 +319,7 @@ function StandingsTable({
                     <span className="font-medium">{TEAMS_ES[s.team]}</span>
                     {passes && <Star className="w-3 h-3 text-lime-400 fill-lime-400"/>}
                     {passes3rd && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400"/>}
-                    {userHit && i < 3 && (
+                    {userHit && i < 2 && (
                       <span className="text-[10px] bg-lime-400 text-black px-1 rounded font-bold ml-1">+1</span>
                     )}
                   </div>

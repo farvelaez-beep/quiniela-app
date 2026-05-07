@@ -41,7 +41,7 @@ export function scoreGroupPositions(
   const userTable = calculateGroupStandings(groupKey, predictions);
   const realTable = calculateGroupStandings(groupKey, results);
   let pts = 0;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     if (userTable[i] && realTable[i] && userTable[i].team === realTable[i].team) pts++;
   }
   return pts;

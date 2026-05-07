@@ -51,12 +51,11 @@ export default function RulesPage() {
             <PointCard pts="0" label="Sin acierto" desc="Pronosticaste 2-1 y el partido terminó 0-2" />
             <PointCard pts="+1" label="Acertar 1° lugar de un grupo" desc="Bonificación adicional por cada grupo donde el equipo que tú dejaste 1° quedó 1° oficial" highlight />
             <PointCard pts="+1" label="Acertar 2° lugar de un grupo" desc="Misma idea para la posición 2 de cada grupo" highlight />
-            <PointCard pts="+1" label="Acertar 3° lugar de un grupo" desc="Misma idea para la posición 3 de cada grupo" highlight />
             <PointCard pts="+5" label="Acertar el goleador" desc="El nombre debe coincidir exactamente" highlight />
             <PointCard pts="+5" label="Acertar el campeón" desc="El país que levante la copa el 19 de julio" highlight />
           </div>
           <p className="text-xs text-zinc-500 mt-4">
-            La bonificación de posiciones (1°/2°/3°) se aplica una vez se hayan jugado los 6 partidos del grupo. Como hay 12 grupos, hay hasta <strong className="text-zinc-300">36 puntos</strong> en juego solo por posiciones de grupo.
+            La bonificación de posiciones (1°/2°) se aplica una vez se hayan jugado los 6 partidos del grupo. Como hay 12 grupos, hay hasta <strong className="text-zinc-300">24 puntos</strong> en juego solo por posiciones de grupo.
           </p>
         </Section>
 
