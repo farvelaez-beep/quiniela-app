@@ -6,7 +6,7 @@ export default async function PlayersPage() {
 
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, email, display_name, paid, is_admin, created_at')
+    .select('id, email, display_name, phone_number, paid, is_admin, created_at')
     .order('created_at', { ascending: false });
 
   const { data: settings } = await supabase
@@ -18,7 +18,9 @@ export default async function PlayersPage() {
   return (
     <PlayersClient
       players={(profiles ?? []).map(p => ({
-        id: p.id, email: p.email, name: p.display_name, paid: p.paid,
+        id: p.id, email: p.email, name: p.display_name,
+        phone: p.phone_number ?? '',
+        paid: p.paid,
         isAdmin: p.is_admin, createdAt: p.created_at,
       }))}
       entryFee={settings?.entry_fee ?? 0}

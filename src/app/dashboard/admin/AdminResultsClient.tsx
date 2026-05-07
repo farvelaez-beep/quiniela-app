@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Save, Loader2, Lock, Unlock, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, Save, Loader2, Lock, Unlock, Check, Trophy, Star } from 'lucide-react';
 import { GROUPS, ALL_MATCHES, ALL_TEAMS, TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { createClient } from '@/lib/supabase/client';
+import { calculateGroupStandings, calculateBestThirdPlaces, type TeamStats } from '@/lib/standings';
 
 type Score = { home_score: number | ''; away_score: number | '' };
 
@@ -39,19 +40,16 @@ export default function AdminResultsClient({
   const save = async () => {
     setSaving(true);
     const supabase = createClient();
-
     const rows = Object.entries(results)
       .filter(([_, s]) => s.home_score !== '' && s.away_score !== '')
       .map(([match_id, s]) => ({ match_id, home_score: s.home_score as number, away_score: s.away_score as number }));
     if (rows.length > 0) {
       await supabase.from('match_results').upsert(rows, { onConflict: 'match_id' });
     }
-
     await supabase.from('tournament_settings').update({
       official_top_scorer: topScorer.trim() || null,
       official_champion: champion || null,
     }).eq('id', 1);
-
     setSaving(false);
     setDirty(false);
     setSavedAt(Date.now());
@@ -70,6 +68,23 @@ export default function AdminResultsClient({
   };
 
   const sortedTeams = [...ALL_TEAMS].sort((a,b) => TEAMS_ES[a].localeCompare(TEAMS_ES[b]));
+
+  // Resultados limpios para calcular tablas
+  const cleanResults = useMemo(() => {
+    const m: Record<string, { home_score: number; away_score: number }> = {};
+    Object.entries(results).forEach(([k, v]) => {
+      if (v.home_score !== '' && v.away_score !== '') {
+        m[k] = { home_score: v.home_score as number, away_score: v.away_score as number };
+      }
+    });
+    return m;
+  }, [results]);
+
+  const top8ThirdsOfficial = useMemo(() => {
+    const set = new Set<string>();
+    calculateBestThirdPlaces(cleanResults).forEach(t => set.add(t.team));
+    return set;
+  }, [cleanResults]);
 
   return (
     <div>
@@ -111,6 +126,8 @@ export default function AdminResultsClient({
             const r = results[m.id]; return r && r.home_score !== '' && r.away_score !== '';
           }).length;
           const isOpen = openGroup === gKey;
+          const officialStandings = filled === 6 ? calculateGroupStandings(gKey, cleanResults) : null;
+
           return (
             <div key={gKey} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
               <button onClick={()=>setOpenGroup(isOpen?null:gKey)}
@@ -147,6 +164,69 @@ export default function AdminResultsClient({
                       </div>
                     );
                   })}
+
+                  {/* Tabla oficial calculada */}
+                  {officialStandings && (
+                    <div className="mt-4 pt-4 border-t border-zinc-800">
+                      <div className="text-xs uppercase tracking-wider text-zinc-500 font-bold mb-3 flex items-center gap-2">
+                        <Trophy className="w-3.5 h-3.5 text-yellow-400"/>
+                        Tabla oficial (calculada de los resultados cargados)
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs min-w-[480px]">
+                          <thead>
+                            <tr className="text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+                              <th className="text-left py-1.5 px-1 w-8">#</th>
+                              <th className="text-left py-1.5 px-1">Equipo</th>
+                              <th className="text-center py-1.5 px-1">PJ</th>
+                              <th className="text-center py-1.5 px-1">G</th>
+                              <th className="text-center py-1.5 px-1">E</th>
+                              <th className="text-center py-1.5 px-1">P</th>
+                              <th className="text-center py-1.5 px-1">GF</th>
+                              <th className="text-center py-1.5 px-1">GC</th>
+                              <th className="text-center py-1.5 px-1">DG</th>
+                              <th className="text-right py-1.5 px-1 font-display">PTS</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {officialStandings.map((s, i) => {
+                              const passes = i < 2;
+                              const passes3rd = i === 2 && top8ThirdsOfficial.has(s.team);
+                              return (
+                                <tr key={s.team} className={`border-b border-zinc-800/50 ${
+                                  passes ? 'bg-lime-400/5' : passes3rd ? 'bg-yellow-400/5' : ''
+                                }`}>
+                                  <td className="py-1.5 px-1 font-bold text-zinc-400">{i+1}°</td>
+                                  <td className="py-1.5 px-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <span>{FLAG[s.team]}</span>
+                                      <span className="font-medium">{TEAMS_ES[s.team]}</span>
+                                      {passes && <Star className="w-3 h-3 text-lime-400 fill-lime-400"/>}
+                                      {passes3rd && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400"/>}
+                                    </div>
+                                  </td>
+                                  <td className="text-center py-1.5 px-1 text-zinc-400">{s.played}</td>
+                                  <td className="text-center py-1.5 px-1 text-zinc-300">{s.won}</td>
+                                  <td className="text-center py-1.5 px-1 text-zinc-300">{s.drawn}</td>
+                                  <td className="text-center py-1.5 px-1 text-zinc-300">{s.lost}</td>
+                                  <td className="text-center py-1.5 px-1 text-zinc-400">{s.gf}</td>
+                                  <td className="text-center py-1.5 px-1 text-zinc-400">{s.ga}</td>
+                                  <td className={`text-center py-1.5 px-1 font-medium ${s.gd > 0 ? 'text-lime-400' : s.gd < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
+                                    {s.gd > 0 ? '+' : ''}{s.gd}
+                                  </td>
+                                  <td className="text-right py-1.5 px-1 font-display text-lime-400 text-base">{s.points}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="text-[10px] text-zinc-600 mt-2 flex flex-wrap gap-3">
+                        <span><Star className="w-2.5 h-2.5 inline text-lime-400 fill-lime-400 mr-0.5"/>Clasifica directo</span>
+                        <span><Star className="w-2.5 h-2.5 inline text-yellow-400 fill-yellow-400 mr-0.5"/>Clasifica como mejor 3°</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

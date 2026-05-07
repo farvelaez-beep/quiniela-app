@@ -6,7 +6,7 @@ import { Loader2, Save, Check } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 type Player = {
-  id: string; email: string; name: string;
+  id: string; email: string; name: string; phone: string;
   paid: boolean; isAdmin: boolean; createdAt: string;
 };
 
@@ -97,7 +97,7 @@ export default function PlayersClient({
                 {p.name} {p.isAdmin && <span className="text-yellow-400 text-xs">👑 ADMIN</span>}
               </div>
               <div className="text-xs text-zinc-500">
-                {p.email} · Registrado: {new Date(p.createdAt).toLocaleDateString('es-CO')}
+                {p.email}{p.phone && <> · 📱 {p.phone}</>} · Registrado: {new Date(p.createdAt).toLocaleDateString('es-CO')}
               </div>
             </div>
             <div className="flex items-center gap-2">

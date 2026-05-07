@@ -1,5 +1,6 @@
-import { ALL_MATCHES } from './tournament-data';
+import { ALL_MATCHES, GROUPS } from './tournament-data';
 import { BRACKET } from './bracket';
+import { calculateGroupStandings } from './standings';
 
 type Score = { home_score: number; away_score: number };
 
@@ -14,15 +15,37 @@ export function scoreMatch(pred?: Score, result?: Score): number {
 
 export type Breakdown = {
   total: number;
-  exact: number;           // marcadores exactos en grupos
-  outcome: number;         // resultados acertados en grupos
-  knockoutExact: number;   // marcadores exactos en eliminatorias
-  knockoutOutcome: number; // resultados acertados en eliminatorias
+  exact: number;
+  outcome: number;
+  knockoutExact: number;
+  knockoutOutcome: number;
+  groupPositions: number; // bonificaciones por acertar 1°, 2°, 3° en grupos (1 pt c/u)
   scorer: boolean;
   champion: boolean;
 };
 
 const KNOCKOUT_IDS = BRACKET.map(m => m.id);
+
+// Devuelve cuántas posiciones (1°, 2°, 3°) acertó el usuario en un grupo
+export function scoreGroupPositions(
+  groupKey: string,
+  predictions: Record<string, Score>,
+  results: Record<string, Score>
+): number {
+  // Necesita 6 predicciones y 6 resultados oficiales del grupo
+  const groupMatches = ALL_MATCHES.filter(m => m.group === groupKey);
+  const allPredFilled = groupMatches.every(m => predictions[m.id] !== undefined);
+  const allResFilled = groupMatches.every(m => results[m.id] !== undefined);
+  if (!allPredFilled || !allResFilled) return 0;
+
+  const userTable = calculateGroupStandings(groupKey, predictions);
+  const realTable = calculateGroupStandings(groupKey, results);
+  let pts = 0;
+  for (let i = 0; i < 3; i++) {
+    if (userTable[i] && realTable[i] && userTable[i].team === realTable[i].team) pts++;
+  }
+  return pts;
+}
 
 export function calculatePoints(
   predictionsByMatch: Record<string, Score>,
@@ -31,7 +54,7 @@ export function calculatePoints(
   officialTopScorer?: string | null,
   officialChampion?: string | null
 ): Breakdown {
-  let total = 0, exact = 0, outcome = 0, knockoutExact = 0, knockoutOutcome = 0;
+  let total = 0, exact = 0, outcome = 0, knockoutExact = 0, knockoutOutcome = 0, groupPositions = 0;
 
   // Grupos
   for (const m of ALL_MATCHES) {
@@ -41,7 +64,14 @@ export function calculatePoints(
     total += pts;
   }
 
-  // Eliminatorias - score independiente del team match (per regla del usuario)
+  // Bonificación: 1 pt por cada posición (1°, 2°, 3°) acertada por grupo
+  for (const gKey of Object.keys(GROUPS)) {
+    const gp = scoreGroupPositions(gKey, predictionsByMatch, results);
+    groupPositions += gp;
+  }
+  total += groupPositions;
+
+  // Eliminatorias
   for (const matchId of KNOCKOUT_IDS) {
     const pts = scoreMatch(predictionsByMatch[matchId], results[matchId]);
     if (pts === 3) knockoutExact++;
@@ -57,5 +87,5 @@ export function calculatePoints(
   const champion = !!officialChampion && !!bonusPred.champion && officialChampion === bonusPred.champion;
   if (champion) total += 5;
 
-  return { total, exact, outcome, knockoutExact, knockoutOutcome, scorer, champion };
+  return { total, exact, outcome, knockoutExact, knockoutOutcome, groupPositions, scorer, champion };
 }

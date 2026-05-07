@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { calculatePoints } from '@/lib/scoring';
-import { Trophy, Users, Target, Crown, Check, X } from 'lucide-react';
+import { Trophy, Users, Target, Crown, Check, X, Award } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,17 +13,13 @@ export default async function LeaderboardPage() {
     { data: bonuses },
     { data: results },
     { data: settings },
-    { data: knockoutMatches },
   ] = await Promise.all([
     supabase.from('profiles').select('id, display_name, paid'),
     supabase.from('match_predictions').select('user_id, match_id, home_score, away_score'),
     supabase.from('bonus_predictions').select('user_id, top_scorer, champion'),
     supabase.from('match_results').select('match_id, home_score, away_score'),
     supabase.from('tournament_settings').select('entry_fee, currency, official_top_scorer, official_champion').eq('id', 1).single(),
-    supabase.from('knockout_matches').select('id'),
   ]);
-
-  const knockoutMatchIds = (knockoutMatches ?? []).map(m => m.id);
 
   const resultsMap: Record<string, { home_score: number; away_score: number }> = {};
   (results ?? []).forEach(r => { resultsMap[r.match_id] = { home_score: r.home_score, away_score: r.away_score }; });
@@ -43,17 +39,28 @@ export default async function LeaderboardPage() {
       bonusByUser[p.id] ?? {},
       resultsMap,
       settings?.official_top_scorer,
-      settings?.official_champion,
-      knockoutMatchIds
+      settings?.official_champion
     );
     return { id: p.id, name: p.display_name, paid: p.paid, ...breakdown };
-  }).sort((a,b) => b.total - a.total || (b.exact + b.knockoutExact) - (a.exact + a.knockoutExact));
+  }).sort((a,b) => {
+    // Orden por total, luego desempates: campeón > goleador > exactos > resultados
+    if (b.total !== a.total) return b.total - a.total;
+    if (b.champion !== a.champion) return (b.champion ? 1 : 0) - (a.champion ? 1 : 0);
+    if (b.scorer !== a.scorer) return (b.scorer ? 1 : 0) - (a.scorer ? 1 : 0);
+    const bExact = b.exact + b.knockoutExact;
+    const aExact = a.exact + a.knockoutExact;
+    if (bExact !== aExact) return bExact - aExact;
+    return (b.outcome + b.knockoutOutcome) - (a.outcome + a.knockoutOutcome);
+  });
 
   const totalPlayers = ranking.length;
   const fee = settings?.entry_fee ?? 0;
   const currency = settings?.currency ?? 'COP';
-  const pot = totalPlayers * fee;
   const paidCount = ranking.filter(r => r.paid).length;
+  const pot = paidCount * fee;
+  const prize1 = Math.floor(pot * 0.5);
+  const prize2 = Math.floor(pot * 0.25);
+  const prize3 = Math.floor(pot * 0.10);
 
   return (
     <div>
@@ -61,13 +68,23 @@ export default async function LeaderboardPage() {
 
       <div className="grid grid-cols-3 gap-3 mb-6">
         <Stat label="Jugadores" value={totalPlayers.toString()} />
-        <Stat label={`${currency} en pozo`} value={pot.toLocaleString('es-CO')} />
+        <Stat label={`Pozo (${currency})`} value={pot.toLocaleString('es-CO')} />
         <Stat label="Pagaron" value={`${paidCount}/${totalPlayers}`} />
       </div>
 
+      {pot > 0 && (
+        <div className="bg-zinc-900/50 border border-lime-400/20 rounded-lg p-4 mb-4 grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+          <div className="text-zinc-500 sm:col-span-1 self-center"><Award className="w-3.5 h-3.5 text-lime-400 inline mr-1"/>Premios estimados</div>
+          <div><span className="text-yellow-400">🥇 1°</span> <strong className="text-white">{prize1.toLocaleString('es-CO')}</strong> {currency}</div>
+          <div><span className="text-zinc-300">🥈 2°</span> <strong className="text-white">{prize2.toLocaleString('es-CO')}</strong> {currency}</div>
+          <div><span className="text-orange-400">🥉 3°</span> <strong className="text-white">{prize3.toLocaleString('es-CO')}</strong> {currency}</div>
+        </div>
+      )}
+
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg px-4 py-3 mb-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zinc-400">
-        <span className="flex items-center gap-1.5"><Target className="w-3.5 h-3.5 text-lime-400"/><b className="text-white">G-EX / E-EX</b> = Marcador exacto en Grupos / Eliminatorias (3 pts)</span>
+        <span className="flex items-center gap-1.5"><Target className="w-3.5 h-3.5 text-lime-400"/><b className="text-white">G-EX / E-EX</b> = Marcador exacto Grupos / Eliminatorias (3 pts)</span>
         <span className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-lime-400"/><b className="text-white">G-RES / E-RES</b> = Resultado correcto (1 pt)</span>
+        <span className="flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5 text-lime-400"/><b className="text-white">POS</b> = Posiciones de grupo acertadas (1 pt c/u)</span>
         <span className="flex items-center gap-1.5"><span className="text-lime-400">⚽</span><b className="text-white">GOL</b> = Goleador (5 pts)</span>
         <span className="flex items-center gap-1.5"><Crown className="w-3.5 h-3.5 text-lime-400"/><b className="text-white">CAMP</b> = Campeón (5 pts)</span>
       </div>
@@ -79,13 +96,14 @@ export default async function LeaderboardPage() {
         </div>
       ) : (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-x-auto">
-          <table className="w-full min-w-[720px]">
+          <table className="w-full min-w-[760px]">
             <thead>
               <tr className="border-b border-zinc-800 text-xs uppercase tracking-wider text-zinc-500 font-bold">
                 <th className="px-3 py-3 text-left w-12">#</th>
                 <th className="px-3 py-3 text-left">Jugador</th>
                 <th className="px-2 py-3 text-center w-14">G-EX</th>
                 <th className="px-2 py-3 text-center w-14">G-RES</th>
+                <th className="px-2 py-3 text-center w-12">POS</th>
                 <th className="px-2 py-3 text-center w-14">E-EX</th>
                 <th className="px-2 py-3 text-center w-14">E-RES</th>
                 <th className="px-2 py-3 text-center w-14">GOL</th>
@@ -95,9 +113,14 @@ export default async function LeaderboardPage() {
             </thead>
             <tbody>
               {ranking.map((r, i) => (
-                <tr key={r.id} className={`border-b border-zinc-800 last:border-0 ${i === 0 ? 'bg-lime-400/5' : ''}`}>
+                <tr key={r.id} className={`border-b border-zinc-800 last:border-0 ${
+                  i === 0 ? 'bg-lime-400/5' : i === 1 ? 'bg-zinc-300/5' : i === 2 ? 'bg-orange-400/5' : ''
+                }`}>
                   <td className="px-3 py-3 font-display text-2xl text-zinc-500">
-                    {i === 0 ? <Trophy className="w-6 h-6 text-lime-400"/> : (i+1)}
+                    {i === 0 ? <Trophy className="w-6 h-6 text-lime-400"/> :
+                     i === 1 ? <span className="text-zinc-300">2</span> :
+                     i === 2 ? <span className="text-orange-400">3</span> :
+                     (i+1)}
                   </td>
                   <td className="px-3 py-3">
                     <div className="font-bold flex items-center gap-2">
@@ -107,6 +130,7 @@ export default async function LeaderboardPage() {
                   </td>
                   <td className="px-2 py-3 text-center font-medium text-zinc-300">{r.exact}</td>
                   <td className="px-2 py-3 text-center font-medium text-zinc-300">{r.outcome}</td>
+                  <td className="px-2 py-3 text-center font-medium text-lime-400">{r.groupPositions}</td>
                   <td className="px-2 py-3 text-center font-medium text-zinc-300">{r.knockoutExact}</td>
                   <td className="px-2 py-3 text-center font-medium text-zinc-300">{r.knockoutOutcome}</td>
                   <td className="px-2 py-3 text-center">

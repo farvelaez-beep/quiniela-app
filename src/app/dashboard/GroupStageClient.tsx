@@ -4,8 +4,8 @@ import { useState, useMemo } from 'react';
 import { ChevronDown, ChevronRight, Save, Loader2, Check, Trophy, Star } from 'lucide-react';
 import { GROUPS, ALL_MATCHES, TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { createClient } from '@/lib/supabase/client';
-import { scoreMatch } from '@/lib/scoring';
-import { calculateGroupStandings, calculateBestThirdPlaces } from '@/lib/standings';
+import { scoreMatch, scoreGroupPositions } from '@/lib/scoring';
+import { calculateGroupStandings, calculateBestThirdPlaces, type TeamStats } from '@/lib/standings';
 
 type Score = { home_score: number | ''; away_score: number | '' };
 type PredMap = Record<string, Score>;
@@ -69,7 +69,6 @@ export default function GroupStageClient({
     );
   });
 
-  // Convertir draft a predicciones limpias para calcular tablas
   const cleanPreds = useMemo(() => {
     const m: Record<string, { home_score: number; away_score: number }> = {};
     Object.entries(draft).forEach(([k, v]) => {
@@ -80,24 +79,39 @@ export default function GroupStageClient({
     return m;
   }, [draft]);
 
-  // Top 8 mejores 3ros (para marcar quién pasa)
   const top8Thirds = useMemo(() => {
     const set = new Set<string>();
     calculateBestThirdPlaces(cleanPreds).forEach(t => set.add(t.team));
     return set;
   }, [cleanPreds]);
 
+  // Top 8 mejores 3ros oficial (para tabla oficial)
+  const top8ThirdsOfficial = useMemo(() => {
+    const set = new Set<string>();
+    calculateBestThirdPlaces(results).forEach(t => set.add(t.team));
+    return set;
+  }, [results]);
+
+  // Bonus total por posiciones acertadas
+  const totalPositionBonus = useMemo(() => {
+    let sum = 0;
+    Object.keys(GROUPS).forEach(g => {
+      sum += scoreGroupPositions(g, cleanPreds, results);
+    });
+    return sum;
+  }, [cleanPreds, results]);
+
   return (
     <div>
       <div className="flex items-end justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 className="font-display text-5xl leading-none">FASE DE GRUPOS</h2>
-          <p className="text-zinc-400 text-sm mt-1">72 partidos · Marcador exacto = 3 pts · Resultado correcto = 1 pt</p>
+          <p className="text-zinc-400 text-sm mt-1">72 partidos · Marcador exacto = 3 pts · Resultado = 1 pt · Posición correcta en grupo = +1 pt c/u</p>
         </div>
         <div className="flex items-center gap-4">
-          {pointsTotal > 0 && (
+          {(pointsTotal + totalPositionBonus) > 0 && (
             <div className="text-right">
-              <div className="font-display text-3xl text-lime-400 leading-none">{pointsTotal}</div>
+              <div className="font-display text-3xl text-lime-400 leading-none">{pointsTotal + totalPositionBonus}</div>
               <div className="text-xs text-zinc-500 uppercase">Pts ganados</div>
             </div>
           )}
@@ -117,7 +131,13 @@ export default function GroupStageClient({
             const d = draft[m.id]; return d && d.home_score !== '' && d.away_score !== '';
           }).length;
           const isOpen = openGroup === gKey;
-          const standings = groupFilled === 6 ? calculateGroupStandings(gKey, cleanPreds) : null;
+          const userStandings = groupFilled === 6 ? calculateGroupStandings(gKey, cleanPreds) : null;
+
+          // Tabla oficial si hay 6 resultados oficiales del grupo
+          const officialFilled = matches.filter(m => results[m.id] !== undefined).length;
+          const officialStandings = officialFilled === 6 ? calculateGroupStandings(gKey, results) : null;
+
+          const positionBonus = (userStandings && officialStandings) ? scoreGroupPositions(gKey, cleanPreds, results) : 0;
 
           return (
             <div key={gKey} className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
@@ -130,6 +150,11 @@ export default function GroupStageClient({
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  {positionBonus > 0 && (
+                    <span className="text-xs bg-lime-400/20 text-lime-400 px-2 py-0.5 rounded font-bold">
+                      +{positionBonus}pts pos.
+                    </span>
+                  )}
                   <div className="text-xs text-zinc-500 uppercase font-bold">{groupFilled}/6</div>
                   {isOpen ? <ChevronDown className="w-5 h-5 text-zinc-400"/> : <ChevronRight className="w-5 h-5 text-zinc-400"/>}
                 </div>
@@ -190,71 +215,41 @@ export default function GroupStageClient({
                     </div>
                   ))}
 
-                  {/* Tabla calculada del grupo */}
-                  {standings && (
-                    <div className="mt-4 pt-4 border-t border-zinc-800">
-                      <div className="text-xs uppercase tracking-wider text-zinc-500 font-bold mb-3 flex items-center gap-2">
-                        <Trophy className="w-3.5 h-3.5 text-lime-400"/>
-                        Tabla final (calculada de tu pronóstico)
+                  {/* Tablas: Tu pronóstico vs Oficial */}
+                  {userStandings && (
+                    <div className="mt-4 pt-4 border-t border-zinc-800 grid lg:grid-cols-2 gap-5">
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-zinc-500 font-bold mb-3 flex items-center gap-2">
+                          <Trophy className="w-3.5 h-3.5 text-lime-400"/>
+                          Tu pronóstico (calculado)
+                        </div>
+                        <StandingsTable standings={userStandings} top8Thirds={top8Thirds} />
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs min-w-[480px]">
-                          <thead>
-                            <tr className="text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
-                              <th className="text-left py-1.5 px-1 w-8">#</th>
-                              <th className="text-left py-1.5 px-1">Equipo</th>
-                              <th className="text-center py-1.5 px-1">PJ</th>
-                              <th className="text-center py-1.5 px-1">G</th>
-                              <th className="text-center py-1.5 px-1">E</th>
-                              <th className="text-center py-1.5 px-1">P</th>
-                              <th className="text-center py-1.5 px-1">GF</th>
-                              <th className="text-center py-1.5 px-1">GC</th>
-                              <th className="text-center py-1.5 px-1">DG</th>
-                              <th className="text-right py-1.5 px-1 font-display">PTS</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {standings.map((s, i) => {
-                              const passes = i < 2;
-                              const passes3rd = i === 2 && top8Thirds.has(s.team);
-                              return (
-                                <tr key={s.team} className={`border-b border-zinc-800/50 ${
-                                  passes ? 'bg-lime-400/5' : passes3rd ? 'bg-yellow-400/5' : ''
-                                }`}>
-                                  <td className="py-1.5 px-1 font-bold text-zinc-400">
-                                    {i+1}°
-                                  </td>
-                                  <td className="py-1.5 px-1">
-                                    <div className="flex items-center gap-1.5">
-                                      <span>{FLAG[s.team]}</span>
-                                      <span className="font-medium">{TEAMS_ES[s.team]}</span>
-                                      {passes && <Star className="w-3 h-3 text-lime-400 fill-lime-400"/>}
-                                      {passes3rd && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400"/>}
-                                    </div>
-                                  </td>
-                                  <td className="text-center py-1.5 px-1 text-zinc-400">{s.played}</td>
-                                  <td className="text-center py-1.5 px-1 text-zinc-300">{s.won}</td>
-                                  <td className="text-center py-1.5 px-1 text-zinc-300">{s.drawn}</td>
-                                  <td className="text-center py-1.5 px-1 text-zinc-300">{s.lost}</td>
-                                  <td className="text-center py-1.5 px-1 text-zinc-400">{s.gf}</td>
-                                  <td className="text-center py-1.5 px-1 text-zinc-400">{s.ga}</td>
-                                  <td className={`text-center py-1.5 px-1 font-medium ${s.gd > 0 ? 'text-lime-400' : s.gd < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
-                                    {s.gd > 0 ? '+' : ''}{s.gd}
-                                  </td>
-                                  <td className="text-right py-1.5 px-1 font-display text-lime-400 text-base">{s.points}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="text-[10px] text-zinc-600 mt-2 flex flex-wrap gap-3">
-                        <span><Star className="w-2.5 h-2.5 inline text-lime-400 fill-lime-400 mr-0.5"/>Clasifica directo</span>
-                        <span><Star className="w-2.5 h-2.5 inline text-yellow-400 fill-yellow-400 mr-0.5"/>Clasifica como mejor 3°</span>
-                      </div>
+                      {officialStandings ? (
+                        <div>
+                          <div className="text-xs uppercase tracking-wider text-zinc-500 font-bold mb-3 flex items-center gap-2">
+                            <Trophy className="w-3.5 h-3.5 text-yellow-400"/>
+                            Tabla oficial
+                            {positionBonus > 0 && (
+                              <span className="text-[10px] bg-lime-400/20 text-lime-400 px-1.5 py-0.5 rounded font-bold ml-1">
+                                +{positionBonus} pts
+                              </span>
+                            )}
+                          </div>
+                          <StandingsTable
+                            standings={officialStandings}
+                            top8Thirds={top8ThirdsOfficial}
+                            comparison={userStandings}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center text-xs text-zinc-600 italic">
+                          Tabla oficial aparecerá cuando se carguen los 6 resultados
+                        </div>
+                      )}
                     </div>
                   )}
-                  {!standings && groupFilled < 6 && (
+                  {!userStandings && groupFilled < 6 && (
                     <div className="mt-4 pt-4 border-t border-zinc-800 text-center text-xs text-zinc-500">
                       Llena los 6 partidos para ver la tabla calculada
                     </div>
@@ -281,6 +276,67 @@ export default function GroupStageClient({
           ) : null}
         </div>
       )}
+    </div>
+  );
+}
+
+function StandingsTable({
+  standings, top8Thirds, comparison,
+}: {
+  standings: TeamStats[];
+  top8Thirds: Set<string>;
+  comparison?: TeamStats[]; // si está, marca las posiciones donde el usuario acertó
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs min-w-[420px]">
+        <thead>
+          <tr className="text-zinc-500 uppercase tracking-wider border-b border-zinc-800">
+            <th className="text-left py-1.5 px-1 w-8">#</th>
+            <th className="text-left py-1.5 px-1">Equipo</th>
+            <th className="text-center py-1.5 px-1">PJ</th>
+            <th className="text-center py-1.5 px-1">G</th>
+            <th className="text-center py-1.5 px-1">E</th>
+            <th className="text-center py-1.5 px-1">P</th>
+            <th className="text-center py-1.5 px-1">DG</th>
+            <th className="text-right py-1.5 px-1 font-display">PTS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {standings.map((s, i) => {
+            const passes = i < 2;
+            const passes3rd = i === 2 && top8Thirds.has(s.team);
+            // Si hay comparación, ¿el usuario acertó esta posición?
+            const userHit = comparison && i < 3 && comparison[i] && comparison[i].team === s.team;
+            return (
+              <tr key={s.team} className={`border-b border-zinc-800/50 ${
+                passes ? 'bg-lime-400/5' : passes3rd ? 'bg-yellow-400/5' : ''
+              }`}>
+                <td className="py-1.5 px-1 font-bold text-zinc-400">{i+1}°</td>
+                <td className="py-1.5 px-1">
+                  <div className="flex items-center gap-1.5">
+                    <span>{FLAG[s.team]}</span>
+                    <span className="font-medium">{TEAMS_ES[s.team]}</span>
+                    {passes && <Star className="w-3 h-3 text-lime-400 fill-lime-400"/>}
+                    {passes3rd && <Star className="w-3 h-3 text-yellow-400 fill-yellow-400"/>}
+                    {userHit && i < 3 && (
+                      <span className="text-[10px] bg-lime-400 text-black px-1 rounded font-bold ml-1">+1</span>
+                    )}
+                  </div>
+                </td>
+                <td className="text-center py-1.5 px-1 text-zinc-400">{s.played}</td>
+                <td className="text-center py-1.5 px-1 text-zinc-300">{s.won}</td>
+                <td className="text-center py-1.5 px-1 text-zinc-300">{s.drawn}</td>
+                <td className="text-center py-1.5 px-1 text-zinc-300">{s.lost}</td>
+                <td className={`text-center py-1.5 px-1 font-medium ${s.gd > 0 ? 'text-lime-400' : s.gd < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
+                  {s.gd > 0 ? '+' : ''}{s.gd}
+                </td>
+                <td className="text-right py-1.5 px-1 font-display text-lime-400 text-base">{s.points}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

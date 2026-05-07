@@ -1,16 +1,42 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { AlertCircle, Loader2, CheckCircle, FileText } from 'lucide-react';
 
+const COUNTRY_CODES = [
+  { code: '+57',  flag: '🇨🇴', name: 'Colombia' },
+  { code: '+1',   flag: '🇺🇸', name: 'EE.UU./Canadá' },
+  { code: '+52',  flag: '🇲🇽', name: 'México' },
+  { code: '+34',  flag: '🇪🇸', name: 'España' },
+  { code: '+54',  flag: '🇦🇷', name: 'Argentina' },
+  { code: '+58',  flag: '🇻🇪', name: 'Venezuela' },
+  { code: '+593', flag: '🇪🇨', name: 'Ecuador' },
+  { code: '+51',  flag: '🇵🇪', name: 'Perú' },
+  { code: '+56',  flag: '🇨🇱', name: 'Chile' },
+  { code: '+55',  flag: '🇧🇷', name: 'Brasil' },
+  { code: '+507', flag: '🇵🇦', name: 'Panamá' },
+  { code: '+506', flag: '🇨🇷', name: 'Costa Rica' },
+  { code: '+503', flag: '🇸🇻', name: 'El Salvador' },
+  { code: '+502', flag: '🇬🇹', name: 'Guatemala' },
+  { code: '+504', flag: '🇭🇳', name: 'Honduras' },
+  { code: '+505', flag: '🇳🇮', name: 'Nicaragua' },
+  { code: '+598', flag: '🇺🇾', name: 'Uruguay' },
+  { code: '+595', flag: '🇵🇾', name: 'Paraguay' },
+  { code: '+591', flag: '🇧🇴', name: 'Bolivia' },
+  { code: '+44',  flag: '🇬🇧', name: 'Reino Unido' },
+  { code: '+33',  flag: '🇫🇷', name: 'Francia' },
+  { code: '+49',  flag: '🇩🇪', name: 'Alemania' },
+  { code: '+39',  flag: '🇮🇹', name: 'Italia' },
+];
+
 export default function RegisterPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [countryCode, setCountryCode] = useState('+57');
+  const [phone, setPhone] = useState('');
   const [err, setErr] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,11 +51,23 @@ export default function RegisterPage() {
       return;
     }
 
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 6) {
+      setErr('Ingresa un número de celular válido');
+      setLoading(false);
+      return;
+    }
+
+    const fullPhone = `${countryCode} ${cleanPhone}`;
+
     const supabase = createClient();
     const { error } = await supabase.auth.signUp({
       email, password,
       options: {
-        data: { display_name: displayName.trim() || email.split('@')[0] },
+        data: {
+          display_name: displayName.trim() || email.split('@')[0],
+          phone_number: fullPhone,
+        },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
@@ -96,6 +134,32 @@ export default function RegisterPage() {
               <label className="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-1 block">Email</label>
               <input type="email" required value={email} onChange={e=>setEmail(e.target.value)}
                 className="w-full bg-black border border-zinc-700 rounded-lg px-4 py-3 text-white focus:border-lime-400 focus:outline-none transition" />
+            </div>
+
+            <div>
+              <label className="text-xs uppercase tracking-wider text-zinc-400 font-bold mb-1 block">Celular</label>
+              <div className="flex gap-2">
+                <select
+                  value={countryCode}
+                  onChange={e => setCountryCode(e.target.value)}
+                  className="bg-black border border-zinc-700 rounded-lg px-2 py-3 text-white focus:border-lime-400 focus:outline-none w-32"
+                >
+                  {COUNTRY_CODES.map(c => (
+                    <option key={c.code + c.name} value={c.code}>
+                      {c.flag} {c.code}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  className="flex-1 bg-black border border-zinc-700 rounded-lg px-4 py-3 text-white focus:border-lime-400 focus:outline-none transition"
+                  placeholder="3001234567"
+                />
+              </div>
+              <div className="text-[11px] text-zinc-500 mt-1">Sin guiones ni espacios. Ej: 3001234567</div>
             </div>
 
             <div>
