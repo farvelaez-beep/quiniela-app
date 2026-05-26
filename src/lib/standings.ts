@@ -283,11 +283,12 @@ export function detectUnbreakableTies(
 // Top 8 mejores 3ros lugares segun FIFA: pts -> DG -> GF -> ranking manual -> alfabetico
 export function calculateBestThirdPlaces(
   predictions: Record<string, Score>,
-  thirdsRanking?: string[]
+  thirdsRanking?: string[],
+  groupTiebreakers?: Record<string, string[]>
 ): TeamStats[] {
   const allThird: (TeamStats & { group: string })[] = [];
   for (const groupKey of Object.keys(GROUPS)) {
-    const standings = calculateGroupStandings(groupKey, predictions);
+    const standings = calculateGroupStandings(groupKey, predictions, groupTiebreakers?.[groupKey]);
     if (standings.length >= 3) allThird.push({ ...standings[2], group: groupKey });
   }
   const sorted = [...allThird].sort((a, b) => {
@@ -305,11 +306,12 @@ export function calculateBestThirdPlaces(
 }
 
 export function bestThirdPlacesByGroup(
-  predictions: Record<string, Score>
+  predictions: Record<string, Score>,
+  groupTiebreakers?: Record<string, string[]>
 ): Record<string, string> {
   const all3rd: Record<string, string> = {};
   for (const groupKey of Object.keys(GROUPS)) {
-    const standings = calculateGroupStandings(groupKey, predictions);
+    const standings = calculateGroupStandings(groupKey, predictions, groupTiebreakers?.[groupKey]);
     if (standings.length >= 3) all3rd[standings[2].team] = groupKey;
   }
   const top8 = calculateBestThirdPlaces(predictions);

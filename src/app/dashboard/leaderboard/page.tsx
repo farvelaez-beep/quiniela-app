@@ -14,12 +14,16 @@ export default async function LeaderboardPage() {
     { data: bonuses },
     { data: results },
     { data: settings },
+    { data: userTiebreakers },
+    { data: officialTiebreakers },
   ] = await Promise.all([
     supabase.from('profiles').select('id, display_name, full_name, email, paid'),
     supabase.from('match_predictions').select('user_id, match_id, home_score, away_score'),
     supabase.from('bonus_predictions').select('user_id, top_scorer, champion'),
     supabase.from('match_results').select('match_id, home_score, away_score'),
     supabase.from('tournament_settings').select('is_locked, lock_at, entry_fee, currency, official_top_scorer, official_champion').eq('id', 1).single(),
+    supabase.from('user_group_tiebreaker').select('user_id, group_key, ranking'),
+    supabase.from('official_group_tiebreaker').select('group_key, ranking'),
   ]);
 
   const locked = isEffectivelyLocked(settings);
@@ -36,13 +40,28 @@ export default async function LeaderboardPage() {
   const bonusByUser: Record<string, { top_scorer: string | null; champion: string | null }> = {};
   (bonuses ?? []).forEach(b => { bonusByUser[b.user_id] = { top_scorer: b.top_scorer, champion: b.champion }; });
 
+  // Tiebreakers manuales por usuario y por grupo
+  const tbByUser: Record<string, Record<string, string[]>> = {};
+  (userTiebreakers ?? []).forEach((t: any) => {
+    if (!tbByUser[t.user_id]) tbByUser[t.user_id] = {};
+    tbByUser[t.user_id][t.group_key] = t.ranking as string[];
+  });
+
+  // Tiebreakers oficiales por grupo
+  const officialTbMap: Record<string, string[]> = {};
+  (officialTiebreakers ?? []).forEach((t: any) => {
+    officialTbMap[t.group_key] = t.ranking as string[];
+  });
+
   const fullRanking = (profiles ?? []).map(p => {
     const breakdown = calculatePoints(
       predsByUser[p.id] ?? {},
       bonusByUser[p.id] ?? {},
       resultsMap,
       settings?.official_top_scorer,
-      settings?.official_champion
+      settings?.official_champion,
+      tbByUser[p.id] ?? {},
+      officialTbMap
     );
     return { id: p.id, name: p.display_name, fullName: p.full_name, email: p.email, paid: p.paid, ...breakdown };
   }).sort((a,b) => {

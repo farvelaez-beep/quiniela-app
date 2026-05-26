@@ -15,12 +15,14 @@ export default async function KnockoutPage() {
     { data: predictions },
     { data: results },
     { data: settings },
+    { data: userTiebreakers },
   ] = await Promise.all([
     supabase.from('match_predictions')
       .select('match_id, home_score, away_score, winner_team')
       .eq('user_id', user.id),
     supabase.from('match_results').select('match_id, home_score, away_score'),
     supabase.from('tournament_settings').select('is_locked, lock_at').eq('id', 1).single(),
+    supabase.from('user_group_tiebreaker').select('group_key, ranking').eq('user_id', user.id),
   ]);
 
   const groupPreds: Record<string, { home_score: number; away_score: number }> = {};
@@ -39,8 +41,12 @@ export default async function KnockoutPage() {
     }
   });
 
-  const top8Thirds = calculateBestThirdPlaces(groupPreds);
-  const thirdsByGroup = bestThirdPlacesByGroup(groupPreds);
+  // Tiebreakers manuales por grupo
+  const userTbMap: Record<string, string[]> = {};
+  (userTiebreakers ?? []).forEach((t: any) => { userTbMap[t.group_key] = t.ranking as string[]; });
+
+  const top8Thirds = calculateBestThirdPlaces(groupPreds, undefined, userTbMap);
+  const thirdsByGroup = bestThirdPlacesByGroup(groupPreds, userTbMap);
 
   const resultsMap: Record<string, { home_score: number; away_score: number }> = {};
   (results ?? []).forEach(r => {
@@ -56,6 +62,7 @@ export default async function KnockoutPage() {
       thirdsByGroup={thirdsByGroup}
       results={resultsMap}
       isLocked={isEffectivelyLocked(settings)}
+      userTiebreakers={userTbMap}
     />
   );
 }

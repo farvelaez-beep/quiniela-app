@@ -12,12 +12,13 @@ type PredsByUser = Record<string, { groups: Record<string, Pred>; knockout: Reco
 type BonusByUser = Record<string, { top_scorer: string | null; champion: string | null }>;
 
 export default function AllPredictionsClient({
-  currentUserId, players, predsByUser, bonusByUser,
+  currentUserId, players, predsByUser, bonusByUser, tiebreakersByUser,
 }: {
   currentUserId: string;
   players: { id: string; name: string; fullName: string; email: string }[];
   predsByUser: PredsByUser;
   bonusByUser: BonusByUser;
+  tiebreakersByUser?: Record<string, Record<string, string[]>>;
 }) {
   const initialUserId = players.find(p => p.id === currentUserId)?.id ?? players[0]?.id ?? '';
   const [selectedUserId, setSelectedUserId] = useState<string>(initialUserId);
@@ -26,11 +27,12 @@ export default function AllPredictionsClient({
   const selectedPlayer = players.find(p => p.id === selectedUserId);
   const userPreds = predsByUser[selectedUserId] ?? { groups: {}, knockout: {} };
   const userBonus = bonusByUser[selectedUserId] ?? { top_scorer: null, champion: null };
+  const userTb = tiebreakersByUser?.[selectedUserId] ?? {};
 
-  // Construir bracket del usuario seleccionado
+  // Construir bracket del usuario seleccionado (con sus tiebreakers)
   const userBracket = useMemo(
-    () => buildUserBracket(userPreds.groups, userPreds.knockout),
-    [userPreds.groups, userPreds.knockout]
+    () => buildUserBracket(userPreds.groups, userPreds.knockout, userTb),
+    [userPreds.groups, userPreds.knockout, userTb]
   );
 
   return (
@@ -90,7 +92,7 @@ export default function AllPredictionsClient({
       </div>
 
       {/* Contenido según tab */}
-      {tab === 'groups' && <GroupsView preds={userPreds.groups} />}
+      {tab === 'groups' && <GroupsView preds={userPreds.groups} tiebreakers={userTb} />}
       {tab === 'knockout' && <KnockoutView bracket={userBracket} />}
       {tab === 'bonus' && <BonusView bonus={userBonus} />}
 
@@ -116,7 +118,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function GroupsView({ preds }: { preds: Record<string, Pred> }) {
+function GroupsView({ preds, tiebreakers }: { preds: Record<string, Pred>; tiebreakers: Record<string, string[]> }) {
   return (
     <div className="space-y-4">
       {Object.entries(GROUPS).map(([groupKey]) => {
@@ -127,7 +129,7 @@ function GroupsView({ preds }: { preds: Record<string, Pred> }) {
         Object.entries(preds).forEach(([k, v]) => {
           predsAsScores[k] = { home_score: v.home_score, away_score: v.away_score };
         });
-        const standings = allFilled ? calculateGroupStandings(groupKey, predsAsScores) : null;
+        const standings = allFilled ? calculateGroupStandings(groupKey, predsAsScores, tiebreakers[groupKey]) : null;
 
         return (
           <div key={groupKey} className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">

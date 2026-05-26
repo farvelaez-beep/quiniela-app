@@ -42,10 +42,12 @@ export default async function AllPredictionsPage() {
     { data: profiles },
     { data: predictions },
     { data: bonus },
+    { data: allTiebreakers },
   ] = await Promise.all([
     supabase.from('profiles').select('id, display_name, full_name, email, paid'),
     supabase.from('match_predictions').select('user_id, match_id, home_score, away_score, winner_team'),
     supabase.from('bonus_predictions').select('user_id, top_scorer, champion'),
+    supabase.from('user_group_tiebreaker').select('user_id, group_key, ranking'),
   ]);
 
   // Sólo usuarios que hayan registrado al menos una predicción Y hayan pagado
@@ -88,6 +90,13 @@ export default async function AllPredictionsPage() {
     bonusByUser[b.user_id] = { top_scorer: b.top_scorer, champion: b.champion };
   });
 
+  // Tiebreakers de grupo por usuario: tbByUser[user_id][group_key] = [team1, team2, ...]
+  const tbByUser: Record<string, Record<string, string[]>> = {};
+  (allTiebreakers ?? []).forEach((t: any) => {
+    if (!tbByUser[t.user_id]) tbByUser[t.user_id] = {};
+    tbByUser[t.user_id][t.group_key] = t.ranking as string[];
+  });
+
   // Si no hay jugadores pagados con predicciones, mostrar mensaje
   if (playerList.length === 0) {
     return (
@@ -109,6 +118,7 @@ export default async function AllPredictionsPage() {
       players={playerList}
       predsByUser={predsByUser}
       bonusByUser={bonusByUser}
+      tiebreakersByUser={tbByUser}
     />
   );
 }

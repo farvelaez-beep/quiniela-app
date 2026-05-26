@@ -30,7 +30,9 @@ const KNOCKOUT_IDS = BRACKET.map(m => m.id);
 export function scoreGroupPositions(
   groupKey: string,
   predictions: Record<string, Score>,
-  results: Record<string, Score>
+  results: Record<string, Score>,
+  userTiebreaker?: string[],
+  officialTiebreaker?: string[]
 ): number {
   // Necesita 6 predicciones y 6 resultados oficiales del grupo
   const groupMatches = ALL_MATCHES.filter(m => m.group === groupKey);
@@ -38,8 +40,8 @@ export function scoreGroupPositions(
   const allResFilled = groupMatches.every(m => results[m.id] !== undefined);
   if (!allPredFilled || !allResFilled) return 0;
 
-  const userTable = calculateGroupStandings(groupKey, predictions);
-  const realTable = calculateGroupStandings(groupKey, results);
+  const userTable = calculateGroupStandings(groupKey, predictions, userTiebreaker);
+  const realTable = calculateGroupStandings(groupKey, results, officialTiebreaker);
   let pts = 0;
   for (let i = 0; i < 2; i++) {
     if (userTable[i] && realTable[i] && userTable[i].team === realTable[i].team) pts++;
@@ -52,7 +54,9 @@ export function calculatePoints(
   bonusPred: { top_scorer?: string | null; champion?: string | null },
   results: Record<string, Score>,
   officialTopScorer?: string | null,
-  officialChampion?: string | null
+  officialChampion?: string | null,
+  userTiebreakers?: Record<string, string[]>,
+  officialTiebreakers?: Record<string, string[]>
 ): Breakdown {
   let total = 0, exact = 0, outcome = 0, knockoutExact = 0, knockoutOutcome = 0, groupPositions = 0;
 
@@ -66,7 +70,10 @@ export function calculatePoints(
 
   // Bonificación: 1 pt por cada posición (1°, 2°, 3°) acertada por grupo
   for (const gKey of Object.keys(GROUPS)) {
-    const gp = scoreGroupPositions(gKey, predictionsByMatch, results);
+    const gp = scoreGroupPositions(
+      gKey, predictionsByMatch, results,
+      userTiebreakers?.[gKey], officialTiebreakers?.[gKey]
+    );
     groupPositions += gp;
   }
   total += groupPositions;

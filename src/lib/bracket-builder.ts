@@ -31,18 +31,19 @@ function determineWinner(
 // Asigna 3ros lugares a slots R32 según el Anexo C oficial FIFA
 // Devuelve { slot_id: teamCode } basado en cuáles 8 grupos tienen los mejores 3ros
 export function computeFifaThirdAssignments(
-  predictions: Record<string, Score>
+  predictions: Record<string, Score>,
+  userTiebreakers?: Record<string, string[]>
 ): {
   assignments: Record<string, string>;
   fifaKey: string | null;
   optionNumber: number | null;
   groupOfTeam: Record<string, string>;
 } {
-  const top8 = calculateBestThirdPlaces(predictions);
+  const top8 = calculateBestThirdPlaces(predictions, undefined, userTiebreakers);
   if (top8.length < 8) return { assignments: {}, fifaKey: null, optionNumber: null, groupOfTeam: {} };
 
   // Map team -> group para los 8 que clasifican
-  const teamToGroup = bestThirdPlacesByGroup(predictions);
+  const teamToGroup = bestThirdPlacesByGroup(predictions, userTiebreakers);
   const groupToTeam: Record<string, string> = {};
   Object.entries(teamToGroup).forEach(([team, group]) => { groupToTeam[group] = team; });
 
@@ -68,19 +69,20 @@ export function computeFifaThirdAssignments(
 
 export function buildUserBracket(
   groupPredictions: Record<string, Score>,
-  knockoutPredictions: Record<string, Prediction>
+  knockoutPredictions: Record<string, Prediction>,
+  userTiebreakers?: Record<string, string[]>
 ): ResolvedMatch[] {
   const groupTops: Record<string, { first: string | null; second: string | null }> = {};
   const groupKeys = ['A','B','C','D','E','F','G','H','I','J','K','L'];
   for (const g of groupKeys) {
-    const standings = calculateGroupStandings(g, groupPredictions);
+    const standings = calculateGroupStandings(g, groupPredictions, userTiebreakers?.[g]);
     groupTops[g] = {
       first: standings[0]?.team ?? null,
       second: standings[1]?.team ?? null,
     };
   }
 
-  const { assignments: fifaThirdAssignments } = computeFifaThirdAssignments(groupPredictions);
+  const { assignments: fifaThirdAssignments } = computeFifaThirdAssignments(groupPredictions, userTiebreakers);
 
   const resolved: Record<string, ResolvedMatch> = {};
 

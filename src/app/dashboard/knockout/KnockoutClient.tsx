@@ -12,7 +12,7 @@ import { createClient } from '@/lib/supabase/client';
 type KPred = { home_score: number | ''; away_score: number | ''; winner_team: string | null };
 
 export default function KnockoutClient({
-  userId, groupPredictions, knockoutPredictions, top8Thirds, thirdsByGroup, results, isLocked,
+  userId, groupPredictions, knockoutPredictions, top8Thirds, thirdsByGroup, results, isLocked, userTiebreakers,
 }: {
   userId: string;
   groupPredictions: Record<string, { home_score: number; away_score: number }>;
@@ -21,6 +21,7 @@ export default function KnockoutClient({
   thirdsByGroup: Record<string, string>;
   results: Record<string, { home_score: number; away_score: number }>;
   isLocked: boolean;
+  userTiebreakers?: Record<string, string[]>;
 }) {
   const router = useRouter();
 
@@ -50,11 +51,12 @@ export default function KnockoutClient({
           away_score: p.away_score === '' ? 0 : (p.away_score as number),
           winner_team: p.winner_team,
         }])
-      )
+      ),
+      userTiebreakers
     );
-  }, [groupPredictions, preds]);
+  }, [groupPredictions, preds, userTiebreakers]);
 
-  const fifaInfo = useMemo(() => computeFifaThirdAssignments(groupPredictions), [groupPredictions]);
+  const fifaInfo = useMemo(() => computeFifaThirdAssignments(groupPredictions, userTiebreakers), [groupPredictions, userTiebreakers]);
 
   const updateScore = (matchId: string, side: 'home_score'|'away_score', val: string) => {
     if (val !== '' && (isNaN(+val) || +val < 0 || +val > 30)) return;
