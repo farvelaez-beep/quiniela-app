@@ -75,9 +75,9 @@ export default async function LeaderboardPage() {
     return (b.outcome + b.knockoutOutcome) - (a.outcome + a.knockoutOutcome);
   });
 
-  // Si la quiniela está bloqueada, sólo se compite/visibilizan los que pagaron
-  const ranking = locked ? fullRanking.filter(r => r.paid) : fullRanking;
-  const hiddenCount = locked ? fullRanking.length - ranking.length : 0;
+  // Mostramos a TODOS los jugadores siempre. El filtro por pago se aplica
+  // SOLO al cálculo del pozo y los premios (ya hecho abajo), no a la visibilidad.
+  const ranking = fullRanking;
 
   const totalPlayers = fullRanking.length;
   const fee = settings?.entry_fee ?? 0;
@@ -115,12 +115,12 @@ export default async function LeaderboardPage() {
         <span className="flex items-center gap-1.5"><Crown className="w-3.5 h-3.5 text-lime-400"/><b className="text-white">CAMP</b> = Campeón (5 pts)</span>
       </div>
 
-      {hiddenCount > 0 && (
-        <div className="bg-zinc-900/50 border border-yellow-500/20 rounded-lg px-4 py-3 mb-4 text-xs text-zinc-400 flex items-center gap-2">
-          <DollarSign className="w-4 h-4 text-yellow-400 flex-shrink-0"/>
+      {paidCount < totalPlayers && (
+        <div className="bg-zinc-900/50 border border-blue-500/20 rounded-lg px-4 py-3 mb-4 text-xs text-zinc-400 flex items-center gap-2">
+          <DollarSign className="w-4 h-4 text-blue-400 flex-shrink-0"/>
           <span>
-            <strong className="text-yellow-300">{hiddenCount}</strong> jugador{hiddenCount > 1 ? 'es' : ''} sin pago confirmado{' '}
-            {hiddenCount > 1 ? 'están' : 'está'} oculto{hiddenCount > 1 ? 's' : ''} de la tabla. Solo compiten por premios los que pagaron.
+            <strong className="text-blue-300">{totalPlayers - paidCount}</strong> jugador{(totalPlayers - paidCount) > 1 ? 'es' : ''} sin pago confirmado aparece{(totalPlayers - paidCount) > 1 ? 'n' : ''} con un punto rojo 🔴.
+            Los premios se reparten solo entre los <strong className="text-lime-300">{paidCount}</strong> que pagaron.
           </span>
         </div>
       )}
@@ -129,9 +129,7 @@ export default async function LeaderboardPage() {
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 text-center">
           <Users className="w-12 h-12 text-zinc-600 mx-auto mb-3"/>
           <p className="text-zinc-400">
-            {locked
-              ? 'No hay jugadores con pago confirmado.'
-              : 'Aún no hay jugadores. Comparte el link para que se registren.'}
+            Aún no hay jugadores. Comparte el link para que se registren.
           </p>
         </div>
       ) : (
@@ -149,7 +147,7 @@ export default async function LeaderboardPage() {
                 <th className="px-2 py-3 text-center w-14">GOL</th>
                 <th className="px-2 py-3 text-center w-14">CAMP</th>
                 <th className="px-3 py-3 text-right w-20">TOTAL</th>
-                {!locked && <th className="px-3 py-3 text-center w-16">PAGÓ</th>}
+                <th className="px-3 py-3 text-center w-16">PAGÓ</th>
               </tr>
             </thead>
             <tbody>
@@ -166,7 +164,7 @@ export default async function LeaderboardPage() {
                   <td className="px-3 py-3">
                     <div className="font-bold flex items-center gap-2">
                       {r.name}
-                      {!r.paid && !locked && <span title="No ha pagado" className="w-2 h-2 rounded-full bg-red-500"></span>}
+                      {!r.paid && <span title="No ha pagado" className="w-2 h-2 rounded-full bg-red-500"></span>}
                     </div>
                     {r.fullName && (
                       <div className="text-[11px] text-zinc-400 font-normal mt-0.5 truncate max-w-[260px]" title={r.fullName}>
@@ -191,19 +189,17 @@ export default async function LeaderboardPage() {
                     {r.champion ? <Check className="w-4 h-4 text-lime-400 inline"/> : <X className="w-4 h-4 text-zinc-700 inline"/>}
                   </td>
                   <td className="px-3 py-3 text-right font-display text-2xl text-lime-400">{r.total}</td>
-                  {!locked && (
-                    <td className="px-3 py-3 text-center">
-                      {r.paid ? (
-                        <span className="inline-flex items-center gap-1 bg-lime-400/10 text-lime-400 text-xs font-bold uppercase px-2 py-1 rounded-full">
-                          <Check className="w-3 h-3"/> Sí
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-400 text-xs font-bold uppercase px-2 py-1 rounded-full">
-                          <X className="w-3 h-3"/> No
-                        </span>
-                      )}
-                    </td>
-                  )}
+                  <td className="px-3 py-3 text-center">
+                    {r.paid ? (
+                      <span className="inline-flex items-center gap-1 bg-lime-400/10 text-lime-400 text-xs font-bold uppercase px-2 py-1 rounded-full">
+                        <Check className="w-3 h-3"/> Sí
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-400 text-xs font-bold uppercase px-2 py-1 rounded-full">
+                        <X className="w-3 h-3"/> No
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
