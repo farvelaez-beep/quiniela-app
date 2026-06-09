@@ -57,12 +57,14 @@ export default async function AllPredictionsPage() {
 
   const playerList = ((profiles ?? []) as Array<{ id: string; display_name: string | null; full_name: string | null; email: string | null; paid: boolean | null }>)
     .filter(p => usersWithPreds.has(p.id))
-    .filter(p => p.paid === true) // sólo pagados — los que no pagaron no compiten
+    // Mostramos a TODOS los que pronostican (no filtramos por pago).
+    // El filtro por pago se aplica en el LEADERBOARD para premios.
     .map(p => ({
       id: p.id,
       name: p.display_name || 'Sin nombre',
       fullName: p.full_name || '',
       email: p.email || '',
+      paid: p.paid === true,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 

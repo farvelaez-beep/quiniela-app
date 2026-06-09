@@ -15,7 +15,7 @@ export default function AllPredictionsClient({
   currentUserId, players, predsByUser, bonusByUser, tiebreakersByUser,
 }: {
   currentUserId: string;
-  players: { id: string; name: string; fullName: string; email: string }[];
+  players: { id: string; name: string; fullName: string; email: string; paid: boolean }[];
   predsByUser: PredsByUser;
   bonusByUser: BonusByUser;
   tiebreakersByUser?: Record<string, Record<string, string[]>>;
@@ -98,9 +98,10 @@ export default function AllPredictionsClient({
               const fullPart = p.fullName && p.fullName !== p.name ? ` (${p.fullName})` : '';
               const youPart = p.id === currentUserId ? ' — tú' : '';
               const emailPart = p.email ? ` · ${p.email}` : '';
+              const paidPart = p.paid ? ' ✓' : '';
               return (
                 <option key={p.id} value={p.id}>
-                  {p.name}{fullPart}{emailPart}{youPart}
+                  {p.name}{fullPart}{emailPart}{paidPart}{youPart}
                 </option>
               );
             })}
@@ -349,7 +350,7 @@ function MatrixView({
   players, predsByUser, bonusByUser, tiebreakersByUser,
   tab, setTab, matrixGroup, setMatrixGroup, matrixPhase, setMatrixPhase,
 }: {
-  players: { id: string; name: string; fullName: string; email: string }[];
+  players: { id: string; name: string; fullName: string; email: string; paid: boolean }[];
   predsByUser: PredsByUser;
   bonusByUser: BonusByUser;
   tiebreakersByUser?: Record<string, Record<string, string[]>>;
@@ -389,6 +390,12 @@ function MatrixView({
       {tab === 'bonus' && (
         <MatrixBonusView players={players} bonusByUser={bonusByUser} />
       )}
+
+      {/* Leyenda */}
+      <div className="mt-4 text-xs text-zinc-500 flex items-center gap-2">
+        <span className="text-lime-400">●</span>
+        <span>= Jugador con pago confirmado (compite por premios)</span>
+      </div>
     </div>
   );
 }
@@ -399,7 +406,7 @@ function MatrixView({
 function MatrixGroupsView({
   players, predsByUser, matrixGroup, setMatrixGroup,
 }: {
-  players: { id: string; name: string; fullName: string; email: string }[];
+  players: { id: string; name: string; fullName: string; email: string; paid: boolean }[];
   predsByUser: PredsByUser;
   matrixGroup: string;
   setMatrixGroup: (g: string) => void;
@@ -444,8 +451,9 @@ function MatrixGroupsView({
                 </th>
                 {players.map(p => (
                   <th key={p.id} className="px-2 py-2 text-center border-r border-zinc-800 min-w-[80px] last:border-r-0">
-                    <div className="text-xs font-bold text-white truncate max-w-[100px]" title={p.fullName || p.name}>
+                    <div className="text-xs font-bold text-white truncate max-w-[100px] flex items-center justify-center gap-1" title={p.fullName || p.name}>
                       {p.name}
+                      {p.paid && <span className="text-lime-400 text-[10px]" title="Pagó">●</span>}
                     </div>
                   </th>
                 ))}
@@ -494,7 +502,7 @@ function MatrixGroupsView({
 function MatrixKnockoutView({
   players, predsByUser, tiebreakersByUser, matrixPhase, setMatrixPhase,
 }: {
-  players: { id: string; name: string; fullName: string; email: string }[];
+  players: { id: string; name: string; fullName: string; email: string; paid: boolean }[];
   predsByUser: PredsByUser;
   tiebreakersByUser?: Record<string, Record<string, string[]>>;
   matrixPhase: 'r32' | 'r16' | 'qf' | 'sf' | 'tp' | 'final';
@@ -563,8 +571,9 @@ function MatrixKnockoutView({
                 </th>
                 {players.map(p => (
                   <th key={p.id} className="px-2 py-2 text-center border-r border-zinc-800 min-w-[140px] last:border-r-0">
-                    <div className="text-xs font-bold text-white truncate max-w-[140px]" title={p.fullName || p.name}>
+                    <div className="text-xs font-bold text-white truncate max-w-[140px] flex items-center justify-center gap-1" title={p.fullName || p.name}>
                       {p.name}
+                      {p.paid && <span className="text-lime-400 text-[10px]" title="Pagó">●</span>}
                     </div>
                   </th>
                 ))}
@@ -625,7 +634,7 @@ function MatrixKnockoutView({
 function MatrixBonusView({
   players, bonusByUser,
 }: {
-  players: { id: string; name: string; fullName: string; email: string }[];
+  players: { id: string; name: string; fullName: string; email: string; paid: boolean }[];
   bonusByUser: BonusByUser;
 }) {
   return (
@@ -652,7 +661,10 @@ function MatrixBonusView({
               return (
                 <tr key={p.id} className={`border-t border-zinc-800 ${idx % 2 === 0 ? 'bg-zinc-900' : 'bg-zinc-900/50'}`}>
                   <td className="px-4 py-3">
-                    <div className="font-bold text-white">{p.name}</div>
+                    <div className="font-bold text-white flex items-center gap-2">
+                      {p.name}
+                      {p.paid && <span className="text-lime-400 text-xs" title="Pagó">●</span>}
+                    </div>
                     {p.fullName && p.fullName !== p.name && (
                       <div className="text-[11px] text-zinc-400">{p.fullName}</div>
                     )}
