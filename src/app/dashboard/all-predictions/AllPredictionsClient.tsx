@@ -15,7 +15,7 @@ export default function AllPredictionsClient({
   currentUserId, players, predsByUser, bonusByUser, tiebreakersByUser,
 }: {
   currentUserId: string;
-  players: { id: string; name: string; fullName: string; email: string; paid: boolean }[];
+  players: { id: string; name: string; fullName: string; email: string; paid: boolean; hasPredictions: boolean }[];
   predsByUser: PredsByUser;
   bonusByUser: BonusByUser;
   tiebreakersByUser?: Record<string, Record<string, string[]>>;
@@ -99,9 +99,10 @@ export default function AllPredictionsClient({
               const youPart = p.id === currentUserId ? ' — tú' : '';
               const emailPart = p.email ? ` · ${p.email}` : '';
               const paidPart = p.paid ? ' ✓' : '';
+              const noPredsPart = !p.hasPredictions ? ' — sin pronósticos' : '';
               return (
                 <option key={p.id} value={p.id}>
-                  {p.name}{fullPart}{emailPart}{paidPart}{youPart}
+                  {p.name}{fullPart}{emailPart}{paidPart}{noPredsPart}{youPart}
                 </option>
               );
             })}
@@ -350,7 +351,7 @@ function MatrixView({
   players, predsByUser, bonusByUser, tiebreakersByUser,
   tab, setTab, matrixGroup, setMatrixGroup, matrixPhase, setMatrixPhase,
 }: {
-  players: { id: string; name: string; fullName: string; email: string; paid: boolean }[];
+  players: { id: string; name: string; fullName: string; email: string; paid: boolean; hasPredictions: boolean }[];
   predsByUser: PredsByUser;
   bonusByUser: BonusByUser;
   tiebreakersByUser?: Record<string, Record<string, string[]>>;
@@ -392,9 +393,13 @@ function MatrixView({
       )}
 
       {/* Leyenda */}
-      <div className="mt-4 text-xs text-zinc-500 flex items-center gap-2">
-        <span className="text-lime-400">●</span>
-        <span>= Jugador con pago confirmado (compite por premios)</span>
+      <div className="mt-4 text-xs text-zinc-500 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className="flex items-center gap-1.5">
+          <span className="text-lime-400">●</span> = Pagó (compite por premios)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="opacity-40 text-zinc-400">columna gris</span> = Sin pronósticos registrados
+        </span>
       </div>
     </div>
   );
@@ -406,7 +411,7 @@ function MatrixView({
 function MatrixGroupsView({
   players, predsByUser, matrixGroup, setMatrixGroup,
 }: {
-  players: { id: string; name: string; fullName: string; email: string; paid: boolean }[];
+  players: { id: string; name: string; fullName: string; email: string; paid: boolean; hasPredictions: boolean }[];
   predsByUser: PredsByUser;
   matrixGroup: string;
   setMatrixGroup: (g: string) => void;
@@ -450,11 +455,14 @@ function MatrixGroupsView({
                   <span className="text-xs uppercase tracking-wider text-zinc-500 font-bold">Partido</span>
                 </th>
                 {players.map(p => (
-                  <th key={p.id} className="px-2 py-2 text-center border-r border-zinc-800 min-w-[80px] last:border-r-0">
+                  <th key={p.id} className={`px-2 py-2 text-center border-r border-zinc-800 min-w-[80px] last:border-r-0 ${!p.hasPredictions ? 'opacity-40' : ''}`}>
                     <div className="text-xs font-bold text-white truncate max-w-[100px] flex items-center justify-center gap-1" title={p.fullName || p.name}>
                       {p.name}
                       {p.paid && <span className="text-lime-400 text-[10px]" title="Pagó">●</span>}
                     </div>
+                    {!p.hasPredictions && (
+                      <div className="text-[9px] text-zinc-500 uppercase tracking-wider mt-0.5">Sin pron.</div>
+                    )}
                   </th>
                 ))}
               </tr>
@@ -502,7 +510,7 @@ function MatrixGroupsView({
 function MatrixKnockoutView({
   players, predsByUser, tiebreakersByUser, matrixPhase, setMatrixPhase,
 }: {
-  players: { id: string; name: string; fullName: string; email: string; paid: boolean }[];
+  players: { id: string; name: string; fullName: string; email: string; paid: boolean; hasPredictions: boolean }[];
   predsByUser: PredsByUser;
   tiebreakersByUser?: Record<string, Record<string, string[]>>;
   matrixPhase: 'r32' | 'r16' | 'qf' | 'sf' | 'tp' | 'final';
@@ -570,11 +578,14 @@ function MatrixKnockoutView({
                   <span className="text-xs uppercase tracking-wider text-zinc-500 font-bold">Slot</span>
                 </th>
                 {players.map(p => (
-                  <th key={p.id} className="px-2 py-2 text-center border-r border-zinc-800 min-w-[140px] last:border-r-0">
+                  <th key={p.id} className={`px-2 py-2 text-center border-r border-zinc-800 min-w-[140px] last:border-r-0 ${!p.hasPredictions ? 'opacity-40' : ''}`}>
                     <div className="text-xs font-bold text-white truncate max-w-[140px] flex items-center justify-center gap-1" title={p.fullName || p.name}>
                       {p.name}
                       {p.paid && <span className="text-lime-400 text-[10px]" title="Pagó">●</span>}
                     </div>
+                    {!p.hasPredictions && (
+                      <div className="text-[9px] text-zinc-500 uppercase tracking-wider mt-0.5">Sin pron.</div>
+                    )}
                   </th>
                 ))}
               </tr>
@@ -634,7 +645,7 @@ function MatrixKnockoutView({
 function MatrixBonusView({
   players, bonusByUser,
 }: {
-  players: { id: string; name: string; fullName: string; email: string; paid: boolean }[];
+  players: { id: string; name: string; fullName: string; email: string; paid: boolean; hasPredictions: boolean }[];
   bonusByUser: BonusByUser;
 }) {
   return (
@@ -659,11 +670,12 @@ function MatrixBonusView({
             {players.map((p, idx) => {
               const bonus = bonusByUser[p.id] ?? { top_scorer: null, champion: null };
               return (
-                <tr key={p.id} className={`border-t border-zinc-800 ${idx % 2 === 0 ? 'bg-zinc-900' : 'bg-zinc-900/50'}`}>
+                <tr key={p.id} className={`border-t border-zinc-800 ${idx % 2 === 0 ? 'bg-zinc-900' : 'bg-zinc-900/50'} ${!p.hasPredictions ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-3">
                     <div className="font-bold text-white flex items-center gap-2">
                       {p.name}
                       {p.paid && <span className="text-lime-400 text-xs" title="Pagó">●</span>}
+                      {!p.hasPredictions && <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-normal">Sin pron.</span>}
                     </div>
                     {p.fullName && p.fullName !== p.name && (
                       <div className="text-[11px] text-zinc-400">{p.fullName}</div>

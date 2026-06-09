@@ -50,23 +50,28 @@ export default async function AllPredictionsPage() {
     supabase.from('user_group_tiebreaker').select('user_id, group_key, ranking'),
   ]);
 
-  // Sólo usuarios que hayan registrado al menos una predicción Y hayan pagado
+  // Sólo usuarios que hayan registrado al menos una predicción
+  // (lo usamos solo para mostrar info, no para filtrar — todos los jugadores aparecen)
   const usersWithPreds = new Set<string>();
   (predictions ?? []).forEach((p: any) => usersWithPreds.add(p.user_id));
   (bonus ?? []).forEach((b: any) => usersWithPreds.add(b.user_id));
 
   const playerList = ((profiles ?? []) as Array<{ id: string; display_name: string | null; full_name: string | null; email: string | null; paid: boolean | null }>)
-    .filter(p => usersWithPreds.has(p.id))
-    // Mostramos a TODOS los que pronostican (no filtramos por pago).
-    // El filtro por pago se aplica en el LEADERBOARD para premios.
+    // Mostramos a TODOS los jugadores registrados, hayan pronosticado o no.
+    // Los que no pronosticaron aparecen con celdas "—" en la matriz.
     .map(p => ({
       id: p.id,
       name: p.display_name || 'Sin nombre',
       fullName: p.full_name || '',
       email: p.email || '',
       paid: p.paid === true,
+      hasPredictions: usersWithPreds.has(p.id),
     }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    .sort((a, b) => {
+      // Primero los que tienen pronósticos, luego los que no
+      if (a.hasPredictions !== b.hasPredictions) return a.hasPredictions ? -1 : 1;
+      return a.name.localeCompare(b.name, 'es');
+    });
 
   // Estructurar predicciones por usuario
   type Pred = { home_score: number; away_score: number; winner_team: string | null };
