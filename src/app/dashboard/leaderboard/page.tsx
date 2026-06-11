@@ -19,7 +19,7 @@ export default async function LeaderboardPage() {
   ] = await Promise.all([
     supabase.from('profiles').select('id, display_name, full_name, email, paid'),
     supabase.from('match_predictions')
-      .select('user_id, match_id, home_score, away_score')
+      .select('user_id, match_id, home_score, away_score, winner_team')
       .range(0, 9999),
     supabase.from('bonus_predictions').select('user_id, top_scorer, champion').range(0, 9999),
     supabase.from('match_results').select('match_id, home_score, away_score'),
@@ -34,9 +34,13 @@ export default async function LeaderboardPage() {
   (results ?? []).forEach(r => { resultsMap[r.match_id] = { home_score: r.home_score, away_score: r.away_score }; });
 
   const predsByUser: Record<string, Record<string, { home_score: number; away_score: number }>> = {};
-  (predictions ?? []).forEach(p => {
+  const finalWinnerByUser: Record<string, string | null> = {};
+  (predictions ?? []).forEach((p: any) => {
     if (!predsByUser[p.user_id]) predsByUser[p.user_id] = {};
     predsByUser[p.user_id][p.match_id] = { home_score: p.home_score, away_score: p.away_score };
+    if (p.match_id === 'final') {
+      finalWinnerByUser[p.user_id] = p.winner_team ?? null;
+    }
   });
 
   const bonusByUser: Record<string, { top_scorer: string | null; champion: string | null }> = {};
@@ -63,7 +67,8 @@ export default async function LeaderboardPage() {
       settings?.official_top_scorer,
       settings?.official_champion,
       tbByUser[p.id] ?? {},
-      officialTbMap
+      officialTbMap,
+      finalWinnerByUser[p.id]
     );
     return { id: p.id, name: p.display_name, fullName: p.full_name, email: p.email, paid: p.paid, ...breakdown };
   }).sort((a,b) => {

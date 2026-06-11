@@ -56,7 +56,8 @@ export function calculatePoints(
   officialTopScorer?: string | null,
   officialChampion?: string | null,
   userTiebreakers?: Record<string, string[]>,
-  officialTiebreakers?: Record<string, string[]>
+  officialTiebreakers?: Record<string, string[]>,
+  finalWinnerPick?: string | null
 ): Breakdown {
   let total = 0, exact = 0, outcome = 0, knockoutExact = 0, knockoutOutcome = 0, groupPositions = 0;
 
@@ -91,7 +92,10 @@ export function calculatePoints(
     officialTopScorer.trim().toLowerCase() === bonusPred.top_scorer.trim().toLowerCase();
   if (scorer) total += 5;
 
-  const champion = !!officialChampion && !!bonusPred.champion && officialChampion === bonusPred.champion;
+  // Campeón efectivo: si el usuario escogió uno explícito, ese gana.
+  // Si no, se infiere del ganador del partido 'final' que predijo en eliminatorias.
+  const effectiveChampion = bonusPred.champion || finalWinnerPick || null;
+  const champion = !!officialChampion && !!effectiveChampion && officialChampion === effectiveChampion;
   if (champion) total += 5;
 
   return { total, exact, outcome, knockoutExact, knockoutOutcome, groupPositions, scorer, champion };

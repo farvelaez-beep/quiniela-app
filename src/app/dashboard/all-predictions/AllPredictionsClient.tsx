@@ -130,7 +130,7 @@ export default function AllPredictionsClient({
       {/* Contenido según tab */}
       {tab === 'groups' && <GroupsView preds={userPreds.groups} tiebreakers={userTb} />}
       {tab === 'knockout' && <KnockoutView bracket={userBracket} />}
-      {tab === 'bonus' && <BonusView bonus={userBonus} />}
+      {tab === 'bonus' && <BonusView bonus={userBonus} finalPick={userPreds.knockout['final']?.winner_team ?? null} />}
 
       {/* Stats del jugador */}
       <div className="mt-6 bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-xs text-zinc-400 flex flex-wrap gap-4">
@@ -311,7 +311,9 @@ function KnockoutView({ bracket }: { bracket: ReturnType<typeof buildUserBracket
   );
 }
 
-function BonusView({ bonus }: { bonus: { top_scorer: string | null; champion: string | null } }) {
+function BonusView({ bonus, finalPick }: { bonus: { top_scorer: string | null; champion: string | null }; finalPick: string | null }) {
+  const effectiveChampion = bonus.champion || finalPick || null;
+  const isDerived = !bonus.champion && !!finalPick;
   return (
     <div className="grid md:grid-cols-2 gap-4">
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
@@ -329,15 +331,20 @@ function BonusView({ bonus }: { bonus: { top_scorer: string | null; champion: st
           Campeón
         </div>
         <div className="font-display text-3xl text-white flex items-center gap-3">
-          {bonus.champion ? (
+          {effectiveChampion ? (
             <>
-              <span className="text-4xl">{FLAG[bonus.champion]}</span>
-              <span>{TEAMS_ES[bonus.champion]}</span>
+              <span className="text-4xl">{FLAG[effectiveChampion]}</span>
+              <span>{TEAMS_ES[effectiveChampion]}</span>
             </>
           ) : (
             <span className="text-zinc-700">— sin pronóstico —</span>
           )}
         </div>
+        {isDerived && (
+          <div className="text-xs text-yellow-400 italic mt-2">
+            ⓘ Inferido del ganador de la final que predijo en eliminatorias
+          </div>
+        )}
       </div>
     </div>
   );
@@ -389,7 +396,7 @@ function MatrixView({
         />
       )}
       {tab === 'bonus' && (
-        <MatrixBonusView players={players} bonusByUser={bonusByUser} />
+        <MatrixBonusView players={players} bonusByUser={bonusByUser} predsByUser={predsByUser} />
       )}
 
       {/* Leyenda */}
@@ -643,10 +650,11 @@ function MatrixKnockoutView({
 // MATRIZ BONUS (Goleador & Campeón)
 // -----------------------------------------------------------------------------
 function MatrixBonusView({
-  players, bonusByUser,
+  players, bonusByUser, predsByUser,
 }: {
   players: { id: string; name: string; fullName: string; email: string; paid: boolean; hasPredictions: boolean }[];
   bonusByUser: BonusByUser;
+  predsByUser: PredsByUser;
 }) {
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
@@ -669,6 +677,9 @@ function MatrixBonusView({
           <tbody>
             {players.map((p, idx) => {
               const bonus = bonusByUser[p.id] ?? { top_scorer: null, champion: null };
+              const finalPick = predsByUser[p.id]?.knockout['final']?.winner_team ?? null;
+              const effectiveChampion = bonus.champion || finalPick || null;
+              const isDerived = !bonus.champion && !!finalPick;
               return (
                 <tr key={p.id} className={`border-t border-zinc-800 ${idx % 2 === 0 ? 'bg-zinc-900' : 'bg-zinc-900/50'} ${!p.hasPredictions ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-3">
@@ -685,10 +696,15 @@ function MatrixBonusView({
                     {bonus.top_scorer || <span className="text-zinc-700">—</span>}
                   </td>
                   <td className="px-4 py-3 text-zinc-300">
-                    {bonus.champion ? (
+                    {effectiveChampion ? (
                       <span className="flex items-center gap-2">
-                        <span className="text-xl">{FLAG[bonus.champion]}</span>
-                        <span>{TEAMS_ES[bonus.champion]}</span>
+                        <span className="text-xl">{FLAG[effectiveChampion]}</span>
+                        <span>{TEAMS_ES[effectiveChampion]}</span>
+                        {isDerived && (
+                          <span className="text-[10px] text-yellow-400 italic" title="Inferido del ganador de la final que predijo">
+                            (de la final)
+                          </span>
+                        )}
                       </span>
                     ) : (
                       <span className="text-zinc-700">—</span>
