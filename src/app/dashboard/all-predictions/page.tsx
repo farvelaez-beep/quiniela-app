@@ -45,9 +45,11 @@ export default async function AllPredictionsPage() {
     { data: allTiebreakers },
   ] = await Promise.all([
     supabase.from('profiles').select('id, display_name, full_name, email, paid'),
-    supabase.from('match_predictions').select('user_id, match_id, home_score, away_score, winner_team'),
-    supabase.from('bonus_predictions').select('user_id, top_scorer, champion'),
-    supabase.from('user_group_tiebreaker').select('user_id, group_key, ranking'),
+    supabase.from('match_predictions')
+      .select('user_id, match_id, home_score, away_score, winner_team')
+      .range(0, 9999),
+    supabase.from('bonus_predictions').select('user_id, top_scorer, champion').range(0, 9999),
+    supabase.from('user_group_tiebreaker').select('user_id, group_key, ranking').range(0, 9999),
   ]);
 
   // Sólo usuarios que hayan registrado al menos una predicción

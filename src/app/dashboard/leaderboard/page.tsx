@@ -18,11 +18,13 @@ export default async function LeaderboardPage() {
     { data: officialTiebreakers },
   ] = await Promise.all([
     supabase.from('profiles').select('id, display_name, full_name, email, paid'),
-    supabase.from('match_predictions').select('user_id, match_id, home_score, away_score'),
-    supabase.from('bonus_predictions').select('user_id, top_scorer, champion'),
+    supabase.from('match_predictions')
+      .select('user_id, match_id, home_score, away_score')
+      .range(0, 9999),
+    supabase.from('bonus_predictions').select('user_id, top_scorer, champion').range(0, 9999),
     supabase.from('match_results').select('match_id, home_score, away_score'),
     supabase.from('tournament_settings').select('is_locked, lock_at, entry_fee, currency, official_top_scorer, official_champion').eq('id', 1).single(),
-    supabase.from('user_group_tiebreaker').select('user_id, group_key, ranking'),
+    supabase.from('user_group_tiebreaker').select('user_id, group_key, ranking').range(0, 9999),
     supabase.from('official_group_tiebreaker').select('group_key, ranking'),
   ]);
 
