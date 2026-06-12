@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Save, Loader2, Lock, Unlock, Check, Trophy, Star, AlertTriangle, ArrowUp, ArrowDown, Trash2, Calendar, Download } from 'lucide-react';
+import { ChevronDown, ChevronRight, Save, Loader2, Lock, Unlock, Check, Trophy, Star, AlertTriangle, ArrowUp, ArrowDown, Trash2, Calendar, Download, Image } from 'lucide-react';
+import Link from 'next/link';
 import { GROUPS, ALL_MATCHES, ALL_TEAMS, TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { createClient } from '@/lib/supabase/client';
 import { calculateGroupStandings, calculateBestThirdPlaces, detectUnbreakableTies, type TeamStats } from '@/lib/standings';
@@ -228,6 +229,11 @@ export default function AdminResultsClient({
           <p className="text-zinc-400 text-sm mt-1">Carga los marcadores reales para que se calculen los puntos</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Link href="/dashboard/admin/reporte"
+            className="px-4 py-2 rounded-lg font-bold uppercase text-sm flex items-center gap-2 bg-yellow-500/10 text-yellow-300 border border-yellow-500/40 hover:bg-yellow-500/20 transition">
+            <Image className="w-4 h-4" aria-label="Imagen"/>
+            Reporte diario
+          </Link>
           <a href="/api/admin/export-predictions" download
             className="px-4 py-2 rounded-lg font-bold uppercase text-sm flex items-center gap-2 bg-lime-400/10 text-lime-300 border border-lime-400/40 hover:bg-lime-400/20 transition">
             <Download className="w-4 h-4"/>
