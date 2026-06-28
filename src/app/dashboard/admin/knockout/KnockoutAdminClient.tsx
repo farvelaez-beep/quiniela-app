@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/client';
 
 type Score = { home_score: number | ''; away_score: number | '' };
 
-// Muestra "🇧🇷 Brasil" a partir del código de equipo, o "Por confirmar" si aún no se resuelve.
+// Muestra "🇧🇷 Brasil" a partir del codigo de equipo, o "Por confirmar" si aun no se resuelve.
 function teamLabel(code: string | null) {
   if (!code) {
     return <span className="text-zinc-600 italic">Por confirmar</span>;
@@ -40,7 +40,7 @@ export default function KnockoutAdminClient({
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  // Resultados REALES de fase de grupos (ids tipo A-1, B-3...) traídos de match_results.
+  // Resultados REALES de fase de grupos (ids tipo A-1, B-3...) traidos de match_results.
   const [groupResults, setGroupResults] = useState<Record<string, { home_score: number; away_score: number }>>({});
   const [loadingTeams, setLoadingTeams] = useState(true);
 
@@ -60,10 +60,10 @@ export default function KnockoutAdminClient({
     })();
   }, []);
 
-  // Resuelve los equipos de CADA cruce con la lógica ya existente del bracket.
+  // Resuelve los equipos de CADA cruce con la logica ya existente del bracket.
   // - Para los grupos usa los resultados reales (groupResults).
-  // - Para la progresión de eliminatorias usa los marcadores que el admin va cargando en vivo (scores),
-  //   así los octavos, cuartos, etc. se van llenando a medida que cargas resultados.
+  // - Para la progresion de eliminatorias usa los marcadores que el admin va cargando en vivo (scores),
+  //   asi los octavos, cuartos, etc. se van llenando a medida que cargas resultados.
   const resolvedTeams = useMemo(() => {
     const knockoutLive: Record<string, { home_score: number; away_score: number }> = {};
     Object.entries(scores).forEach(([id, s]) => {
@@ -87,16 +87,29 @@ export default function KnockoutAdminClient({
   const save = async () => {
     setSaving(true);
     const supabase = createClient();
-    const rows = Object.entries(scores)
+
+    // Filas COMPLETAS (ambos marcadores) -> se guardan / actualizan.
+    const toUpsert = Object.entries(scores)
       .filter(([_, s]) => s.home_score !== '' && s.away_score !== '')
       .map(([match_id, s]) => ({
         match_id,
         home_score: s.home_score as number,
         away_score: s.away_score as number,
       }));
-    if (rows.length > 0) {
-      await supabase.from('match_results').upsert(rows, { onConflict: 'match_id' });
+
+    // Filas VACIAS o incompletas -> se ELIMINAN de la base de datos.
+    // (Solo son ids de eliminatorias: r32_x, r16_x, etc. Nunca toca resultados de grupos.)
+    const toDelete = Object.entries(scores)
+      .filter(([_, s]) => s.home_score === '' || s.away_score === '')
+      .map(([match_id]) => match_id);
+
+    if (toUpsert.length > 0) {
+      await supabase.from('match_results').upsert(toUpsert, { onConflict: 'match_id' });
     }
+    if (toDelete.length > 0) {
+      await supabase.from('match_results').delete().in('match_id', toDelete);
+    }
+
     setSaving(false);
     setDirty(false);
     setSavedAt(Date.now());
@@ -111,12 +124,12 @@ export default function KnockoutAdminClient({
       <div className="mb-6">
         <h2 className="font-display text-5xl leading-none">RESULTADOS ELIMINATORIAS (ADMIN)</h2>
         <p className="text-zinc-400 text-sm mt-1">
-          Carga los marcadores oficiales de cada partido eliminatorio. Los puntos se calculan automáticamente para cada jugador.
+          Carga los marcadores oficiales de cada partido eliminatorio. Los puntos se calculan automaticamente para cada jugador.
         </p>
       </div>
 
       <div className="bg-blue-500/10 border border-blue-500/30 text-blue-200 rounded-lg p-4 mb-4 text-sm">
-        <strong>Cómo funciona:</strong> Los equipos de cada cruce se calculan automáticamente con los resultados reales de la fase de grupos. Mientras el grupo no esté completo, los terceros aparecerán como “Por confirmar”. Tú solo cargas los marcadores reales (R32 #1: 2-1, etc.) y el sistema calcula los puntos contra las predicciones de cada jugador.
+        <strong>Como funciona:</strong> Los equipos de cada cruce se calculan automaticamente con los resultados reales de la fase de grupos. Mientras el grupo no este completo, los terceros apareceran como &ldquo;Por confirmar&rdquo;. Tu solo cargas los marcadores reales (R32 #1: 2-1, etc.) y el sistema calcula los puntos contra las predicciones de cada jugador. Para borrar un resultado, vacia las dos casillas y guarda.
       </div>
 
       <div className="space-y-3">
@@ -159,10 +172,10 @@ export default function KnockoutAdminClient({
                           </span>
                         </div>
 
-                        {/* Equipos reales resueltos automáticamente */}
+                        {/* Equipos reales resueltos automaticamente */}
                         <div className="flex items-center justify-center gap-3 mb-2 text-sm">
                           {loadingTeams
-                            ? <span className="text-zinc-600 italic">Cargando…</span>
+                            ? <span className="text-zinc-600 italic">Cargando&hellip;</span>
                             : <>
                                 {teamLabel(teams?.home ?? null)}
                                 <span className="text-zinc-600 text-xs">vs</span>

@@ -8,6 +8,7 @@ import { BRACKET, PHASE_LABELS, PHASE_SHORT, type BracketMatch } from '@/lib/bra
 import { buildUserBracket, computeFifaThirdAssignments } from '@/lib/bracket-builder';
 import { scoreMatch } from '@/lib/scoring';
 import { createClient } from '@/lib/supabase/client';
+import RealBracketReference from '@/components/RealBracketReference';
 
 type KPred = { home_score: number | ''; away_score: number | ''; winner_team: string | null };
 
@@ -206,6 +207,9 @@ export default function KnockoutClient({
           <div>Pronósticos bloqueados. Solo lectura.</div>
         </div>
       )}
+
+      {/* Referencia: cruces reales del Mundial (no afecta el bracket del jugador) */}
+      <RealBracketReference />
 
       <div className="space-y-3">
         {phasesInOrder.map(phaseKey => {
