@@ -50,6 +50,7 @@ export default function DashboardHeader({
   const tabs = [
     { href: '/dashboard', label: 'Fase de Grupos' },
     { href: '/dashboard/knockout', label: 'Eliminatorias' },
+    { href: '/dashboard/fixture', label: 'Fixture' },
     { href: '/dashboard/bonus', label: 'Goleador & Campeón' },
     { href: '/dashboard/leaderboard', label: 'Tabla' },
     // La pestaña de "Pronósticos de todos" sólo aparece cuando está bloqueada la quiniela

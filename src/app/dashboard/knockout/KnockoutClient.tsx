@@ -8,7 +8,6 @@ import { BRACKET, PHASE_LABELS, PHASE_SHORT, type BracketMatch } from '@/lib/bra
 import { buildUserBracket, computeFifaThirdAssignments } from '@/lib/bracket-builder';
 import { scoreMatch } from '@/lib/scoring';
 import { createClient } from '@/lib/supabase/client';
-import RealBracketReference from '@/components/RealBracketReference';
 
 type KPred = { home_score: number | ''; away_score: number | ''; winner_team: string | null };
 
@@ -130,7 +129,7 @@ export default function KnockoutClient({
         <div>
           <h2 className="font-display text-5xl leading-none">ELIMINATORIAS</h2>
           <p className="text-zinc-400 text-sm mt-1">
-            El bracket se arma solo con tus predicciones de grupos. Asignación oficial de 3ros según el Anexo C de FIFA.
+            El bracket se arma solo con tus predicciones de grupos. Asignacion oficial de 3ros segun el Anexo C de FIFA.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -149,16 +148,16 @@ export default function KnockoutClient({
         </div>
       </div>
 
-      {/* Asignación FIFA de 3ros */}
+      {/* Asignacion FIFA de 3ros */}
       <div className="bg-gradient-to-br from-zinc-900 to-zinc-900/50 border border-lime-400/30 rounded-2xl p-5 mb-6">
         <div className="flex items-start gap-3 mb-4">
           <div className="bg-lime-400 text-black p-2 rounded-lg flex-shrink-0">
             <Sparkles className="w-5 h-5"/>
           </div>
           <div>
-            <h3 className="font-display text-2xl">8 MEJORES 3ROS · ASIGNACIÓN FIFA</h3>
+            <h3 className="font-display text-2xl">8 MEJORES 3ROS · ASIGNACION FIFA</h3>
             <p className="text-sm text-zinc-400 mt-1">
-              Según el <strong className="text-white">Anexo C oficial de la FIFA</strong> (495 combinaciones), tu pronóstico determina automáticamente qué 3ro lugar va contra cada 1° de grupo.
+              Segun el <strong className="text-white">Anexo C oficial de la FIFA</strong> (495 combinaciones), tu pronostico determina automaticamente que 3ro lugar va contra cada 1&deg; de grupo.
             </p>
           </div>
         </div>
@@ -182,10 +181,10 @@ export default function KnockoutClient({
                       {team ? (
                         <>
                           <span>{FLAG[team]} {TEAMS_ES[team]}</span>
-                          <span className="text-zinc-500 text-xs ml-auto">3°{groupLetter}</span>
+                          <span className="text-zinc-500 text-xs ml-auto">3&deg;{groupLetter}</span>
                         </>
                       ) : (
-                        <span className="text-zinc-600 italic">Calculando…</span>
+                        <span className="text-zinc-600 italic">Calculando&hellip;</span>
                       )}
                     </div>
                   </div>
@@ -196,7 +195,7 @@ export default function KnockoutClient({
         ) : (
           <div className="text-center py-8 text-zinc-500 text-sm">
             <AlertCircle className="w-8 h-8 mx-auto mb-2 text-zinc-600"/>
-            Completa los 72 partidos de fase de grupos para ver la asignación oficial FIFA
+            Completa los 72 partidos de fase de grupos para ver la asignacion oficial FIFA
           </div>
         )}
       </div>
@@ -204,12 +203,9 @@ export default function KnockoutClient({
       {isLocked && (
         <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 rounded-lg p-4 mb-4 text-sm flex items-start gap-3">
           <Lock className="w-5 h-5 flex-shrink-0 mt-0.5"/>
-          <div>Pronósticos bloqueados. Solo lectura.</div>
+          <div>Pronosticos bloqueados. Solo lectura.</div>
         </div>
       )}
-
-      {/* Referencia: cruces reales del Mundial (no afecta el bracket del jugador) */}
-      <RealBracketReference />
 
       <div className="space-y-3">
         {phasesInOrder.map(phaseKey => {
@@ -290,7 +286,7 @@ export default function KnockoutClient({
                         {isDraw && hasTeams && (
                           <div className="mt-3 pt-3 border-t border-zinc-800">
                             <div className="text-xs uppercase tracking-wider text-zinc-500 font-bold mb-2">
-                              ¿Quién gana en penales?
+                              Quien gana en penales?
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => updateWinner(m.id, home)} disabled={isLocked}
@@ -311,7 +307,7 @@ export default function KnockoutClient({
 
                         {result && (
                           <div className="mt-3 pt-2 border-t border-zinc-800 text-xs flex items-center justify-center gap-3 text-zinc-500">
-                            <span>Resultado: <span className="text-zinc-300 font-medium">{result.home_score}–{result.away_score}</span></span>
+                            <span>Resultado: <span className="text-zinc-300 font-medium">{result.home_score}&ndash;{result.away_score}</span></span>
                             {points !== null && (
                               <span className={`font-bold ${
                                 points === 3 ? 'text-lime-400' : points === 1 ? 'text-yellow-400' : 'text-zinc-600'
@@ -341,7 +337,7 @@ export default function KnockoutClient({
             <button onClick={save} disabled={saving}
               className="bg-lime-400 text-black px-6 py-3 rounded-full font-bold text-sm shadow-2xl flex items-center gap-2 disabled:opacity-50">
               {saving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
-              Guardar pronósticos
+              Guardar pronosticos
             </button>
           ) : null}
         </div>
