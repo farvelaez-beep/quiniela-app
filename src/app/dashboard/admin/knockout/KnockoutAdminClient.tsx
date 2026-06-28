@@ -1,12 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronRight, Save, Loader2, Check, Trophy } from 'lucide-react';
 import { BRACKET, PHASE_LABELS, PHASE_SHORT, type BracketMatch } from '@/lib/bracket';
+import { buildUserBracket } from '@/lib/bracket-builder';
+import { TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { createClient } from '@/lib/supabase/client';
 
 type Score = { home_score: number | ''; away_score: number | '' };
+
+// Muestra "🇧🇷 Brasil" a partir del código de equipo, o "Por confirmar" si aún no se resuelve.
+function teamLabel(code: string | null) {
+  if (!code) {
+    return <span className="text-zinc-600 italic">Por confirmar</span>;
+  }
+  return (
+    <span className="text-zinc-100 font-semibold whitespace-nowrap">
+      {FLAG[code] ?? ''} {TEAMS_ES[code] ?? code}
+    </span>
+  );
+}
 
 export default function KnockoutAdminClient({
   initialResults,
@@ -25,6 +39,43 @@ export default function KnockoutAdminClient({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  // Resultados REALES de fase de grupos (ids tipo A-1, B-3...) traídos de match_results.
+  const [groupResults, setGroupResults] = useState<Record<string, { home_score: number; away_score: number }>>({});
+  const [loadingTeams, setLoadingTeams] = useState(true);
+
+  // Trae todos los resultados oficiales una vez al montar.
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from('match_results')
+        .select('match_id, home_score, away_score');
+      const all: Record<string, { home_score: number; away_score: number }> = {};
+      (data ?? []).forEach((r: { match_id: string; home_score: number; away_score: number }) => {
+        all[r.match_id] = { home_score: r.home_score, away_score: r.away_score };
+      });
+      setGroupResults(all);
+      setLoadingTeams(false);
+    })();
+  }, []);
+
+  // Resuelve los equipos de CADA cruce con la lógica ya existente del bracket.
+  // - Para los grupos usa los resultados reales (groupResults).
+  // - Para la progresión de eliminatorias usa los marcadores que el admin va cargando en vivo (scores),
+  //   así los octavos, cuartos, etc. se van llenando a medida que cargas resultados.
+  const resolvedTeams = useMemo(() => {
+    const knockoutLive: Record<string, { home_score: number; away_score: number }> = {};
+    Object.entries(scores).forEach(([id, s]) => {
+      if (s.home_score !== '' && s.away_score !== '') {
+        knockoutLive[id] = { home_score: s.home_score as number, away_score: s.away_score as number };
+      }
+    });
+    const resolved = buildUserBracket(groupResults, { ...groupResults, ...knockoutLive });
+    const map: Record<string, { home: string | null; away: string | null }> = {};
+    resolved.forEach(r => { map[r.id] = { home: r.home_team, away: r.away_team }; });
+    return map;
+  }, [groupResults, scores]);
 
   const updateScore = (matchId: string, side: 'home_score'|'away_score', val: string) => {
     if (val !== '' && (isNaN(+val) || +val < 0 || +val > 30)) return;
@@ -65,7 +116,7 @@ export default function KnockoutAdminClient({
       </div>
 
       <div className="bg-blue-500/10 border border-blue-500/30 text-blue-200 rounded-lg p-4 mb-4 text-sm">
-        <strong>Cómo funciona:</strong> El bracket de cada jugador se arma solo con sus predicciones de grupos. Tú solo cargas los marcadores reales (R32 #1: 2-1, R32 #2: 0-3, etc.) y el sistema calcula los puntos contra las predicciones de cada uno.
+        <strong>Cómo funciona:</strong> Los equipos de cada cruce se calculan automáticamente con los resultados reales de la fase de grupos. Mientras el grupo no esté completo, los terceros aparecerán como “Por confirmar”. Tú solo cargas los marcadores reales (R32 #1: 2-1, etc.) y el sistema calcula los puntos contra las predicciones de cada jugador.
       </div>
 
       <div className="space-y-3">
@@ -96,6 +147,7 @@ export default function KnockoutAdminClient({
                 <div className="border-t border-zinc-800 p-4 space-y-3">
                   {phaseMatches.map(m => {
                     const s = scores[m.id] ?? { home_score: '', away_score: '' };
+                    const teams = resolvedTeams[m.id];
                     return (
                       <div key={m.id} className="bg-black/40 rounded-lg p-3">
                         <div className="flex items-center justify-between mb-2">
@@ -106,6 +158,19 @@ export default function KnockoutAdminClient({
                             {new Date(m.match_date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}
                           </span>
                         </div>
+
+                        {/* Equipos reales resueltos automáticamente */}
+                        <div className="flex items-center justify-center gap-3 mb-2 text-sm">
+                          {loadingTeams
+                            ? <span className="text-zinc-600 italic">Cargando…</span>
+                            : <>
+                                {teamLabel(teams?.home ?? null)}
+                                <span className="text-zinc-600 text-xs">vs</span>
+                                {teamLabel(teams?.away ?? null)}
+                              </>
+                          }
+                        </div>
+
                         <div className="flex items-center justify-center gap-3">
                           <span className="text-zinc-400 text-sm">Local</span>
                           <input
