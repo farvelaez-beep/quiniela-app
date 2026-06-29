@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, ChevronRight, Save, Loader2, Check, AlertCircle, Trophy, Lock, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Save, Loader2, Check, AlertCircle, Trophy, Lock, Sparkles, ListOrdered, CalendarClock } from 'lucide-react';
 import { TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { BRACKET, PHASE_LABELS, PHASE_SHORT, type BracketMatch } from '@/lib/bracket';
 import { buildUserBracket, computeFifaThirdAssignments } from '@/lib/bracket-builder';
@@ -10,6 +10,17 @@ import { scoreMatch } from '@/lib/scoring';
 import { createClient } from '@/lib/supabase/client';
 
 type KPred = { home_score: number | ''; away_score: number | ''; winner_team: string | null };
+type SortMode = 'slot' | 'date';
+
+// Fecha (y hora en R32 y final, que tienen hora real) en hora Colombia.
+function fmtWhen(phase: string, match_date: string) {
+  const d = new Date(match_date);
+  const date = d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+  const showTime = phase === 'r32' || phase === 'final';
+  if (!showTime) return date;
+  const time = d.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${date} · ${time}`;
+}
 
 export default function KnockoutClient({
   userId, groupPredictions, knockoutPredictions, top8Thirds, thirdsByGroup, results, isLocked, userTiebreakers,
@@ -37,6 +48,7 @@ export default function KnockoutClient({
   });
 
   const [openPhase, setOpenPhase] = useState<BracketMatch['phase'] | null>('r32');
+  const [sortMode, setSortMode] = useState<SortMode>('slot');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -207,9 +219,36 @@ export default function KnockoutClient({
         </div>
       )}
 
+      {/* Selector de orden */}
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs uppercase tracking-wider text-zinc-500 font-bold mr-1">Ordenar:</span>
+        <button
+          onClick={() => setSortMode('slot')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition border ${
+            sortMode === 'slot'
+              ? 'bg-lime-400 text-black border-lime-400'
+              : 'bg-transparent text-zinc-400 border-zinc-700 hover:text-white'
+          }`}>
+          <ListOrdered className="w-3.5 h-3.5" /> Por slot
+        </button>
+        <button
+          onClick={() => setSortMode('date')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition border ${
+            sortMode === 'date'
+              ? 'bg-lime-400 text-black border-lime-400'
+              : 'bg-transparent text-zinc-400 border-zinc-700 hover:text-white'
+          }`}>
+          <CalendarClock className="w-3.5 h-3.5" /> Por fecha y hora
+        </button>
+      </div>
+
       <div className="space-y-3">
         {phasesInOrder.map(phaseKey => {
-          const phaseMatches = userBracket.filter(m => m.phase === phaseKey);
+          const phaseMatches = userBracket.filter(m => m.phase === phaseKey).sort((a, b) =>
+            sortMode === 'date'
+              ? new Date(a.match_date).getTime() - new Date(b.match_date).getTime()
+              : a.position - b.position
+          );
           const phaseFilled = phaseMatches.filter(m => {
             const p = preds[m.id]; return p && p.home_score !== '' && p.away_score !== '';
           }).length;
@@ -252,7 +291,7 @@ export default function KnockoutClient({
                             {PHASE_SHORT[m.phase]} #{m.position}
                           </span>
                           <span className="text-xs text-zinc-500">
-                            {new Date(m.match_date).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}
+                            {fmtWhen(m.phase, m.match_date)}
                           </span>
                         </div>
                         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
