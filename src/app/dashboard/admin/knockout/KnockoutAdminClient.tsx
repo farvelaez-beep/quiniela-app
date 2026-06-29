@@ -11,7 +11,6 @@ import { createClient } from '@/lib/supabase/client';
 type Score = { home_score: number | ''; away_score: number | '' };
 type SortMode = 'slot' | 'date';
 
-// Muestra "🇧🇷 Brasil" a partir del codigo de equipo, o "Por confirmar" si aun no se resuelve.
 function teamLabel(code: string | null) {
   if (!code) {
     return <span className="text-zinc-600 italic">Por confirmar</span>;
@@ -46,49 +45,71 @@ export default function KnockoutAdminClient({
     });
     return m;
   });
+  // Ganador en penales por partido (solo aplica en empates).
+  const [winners, setWinners] = useState<Record<string, string | null>>({});
   const [openPhase, setOpenPhase] = useState<BracketMatch['phase'] | null>('r32');
   const [sortMode, setSortMode] = useState<SortMode>('slot');
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
-  // Resultados REALES de fase de grupos (ids tipo A-1, B-3...) traidos de match_results.
   const [groupResults, setGroupResults] = useState<Record<string, { home_score: number; away_score: number }>>({});
   const [loadingTeams, setLoadingTeams] = useState(true);
 
+  // Trae resultados oficiales (incluido el ganador en penales) una vez al montar.
   useEffect(() => {
     (async () => {
       const supabase = createClient();
       const { data } = await supabase
         .from('match_results')
-        .select('match_id, home_score, away_score');
+        .select('match_id, home_score, away_score, winner_team');
       const all: Record<string, { home_score: number; away_score: number }> = {};
-      (data ?? []).forEach((r: { match_id: string; home_score: number; away_score: number }) => {
+      const w: Record<string, string | null> = {};
+      (data ?? []).forEach((r: { match_id: string; home_score: number; away_score: number; winner_team: string | null }) => {
         all[r.match_id] = { home_score: r.home_score, away_score: r.away_score };
+        if (r.winner_team) w[r.match_id] = r.winner_team;
       });
       setGroupResults(all);
+      setWinners(w);
       setLoadingTeams(false);
     })();
   }, []);
 
-  // Resuelve los equipos de cada cruce con la logica del bracket.
+  // Resuelve los equipos de cada cruce. Incluye el ganador en penales para que
+  // en los empates avance el equipo correcto a la siguiente ronda.
   const resolvedTeams = useMemo(() => {
-    const knockoutLive: Record<string, { home_score: number; away_score: number }> = {};
+    const knockoutLive: Record<string, { home_score: number; away_score: number; winner_team: string | null }> = {};
     Object.entries(scores).forEach(([id, s]) => {
       if (s.home_score !== '' && s.away_score !== '') {
-        knockoutLive[id] = { home_score: s.home_score as number, away_score: s.away_score as number };
+        knockoutLive[id] = {
+          home_score: s.home_score as number,
+          away_score: s.away_score as number,
+          winner_team: winners[id] ?? null,
+        };
       }
     });
     const resolved = buildUserBracket(groupResults, { ...groupResults, ...knockoutLive });
     const map: Record<string, { home: string | null; away: string | null }> = {};
     resolved.forEach(r => { map[r.id] = { home: r.home_team, away: r.away_team }; });
     return map;
-  }, [groupResults, scores]);
+  }, [groupResults, scores, winners]);
 
   const updateScore = (matchId: string, side: 'home_score'|'away_score', val: string) => {
     if (val !== '' && (isNaN(+val) || +val < 0 || +val > 30)) return;
     const cur = scores[matchId] ?? { home_score: '' as const, away_score: '' as const };
-    setScores({ ...scores, [matchId]: { ...cur, [side]: val === '' ? '' : +val } });
+    const next: Score = { ...cur, [side]: val === '' ? '' : +val };
+    // Si deja de ser empate, se borra el ganador en penales.
+    if (next.home_score !== '' && next.away_score !== '' && next.home_score !== next.away_score) {
+      if (winners[matchId]) {
+        const w = { ...winners }; delete w[matchId]; setWinners(w);
+      }
+    }
+    setScores({ ...scores, [matchId]: next });
+    setDirty(true);
+  };
+
+  const setWinner = (matchId: string, team: string) => {
+    setWinners({ ...winners, [matchId]: team });
     setDirty(true);
   };
 
@@ -98,11 +119,15 @@ export default function KnockoutAdminClient({
 
     const toUpsert = Object.entries(scores)
       .filter(([_, s]) => s.home_score !== '' && s.away_score !== '')
-      .map(([match_id, s]) => ({
-        match_id,
-        home_score: s.home_score as number,
-        away_score: s.away_score as number,
-      }));
+      .map(([match_id, s]) => {
+        const isDraw = s.home_score === s.away_score;
+        return {
+          match_id,
+          home_score: s.home_score as number,
+          away_score: s.away_score as number,
+          winner_team: isDraw ? (winners[match_id] ?? null) : null,
+        };
+      });
 
     const toDelete = Object.entries(scores)
       .filter(([_, s]) => s.home_score === '' || s.away_score === '')
@@ -124,7 +149,6 @@ export default function KnockoutAdminClient({
 
   const phasesInOrder: BracketMatch['phase'][] = ['r32', 'r16', 'qf', 'sf', 'tp', 'final'];
 
-  // Ordena los partidos de una fase segun el modo elegido.
   const sortMatches = (matches: BracketMatch[]) =>
     [...matches].sort((a, b) =>
       sortMode === 'date'
@@ -141,7 +165,6 @@ export default function KnockoutAdminClient({
         </p>
       </div>
 
-      {/* Selector de orden */}
       <div className="flex items-center gap-2 mb-4">
         <span className="text-xs uppercase tracking-wider text-zinc-500 font-bold mr-1">Ordenar:</span>
         <button
@@ -165,7 +188,7 @@ export default function KnockoutAdminClient({
       </div>
 
       <div className="bg-blue-500/10 border border-blue-500/30 text-blue-200 rounded-lg p-4 mb-4 text-sm">
-        <strong>Como funciona:</strong> Los equipos de cada cruce se calculan automaticamente con los resultados reales de la fase de grupos. Las fechas y horas estan en hora Colombia. Para borrar un resultado, vacia las dos casillas y guarda.
+        <strong>Como funciona:</strong> Los equipos de cada cruce se calculan automaticamente con los resultados de la fase de grupos. Las fechas y horas estan en hora Colombia. En empates de eliminatoria, elige quien gano en penales para que avance al cuadro. Para borrar un resultado, vacia las dos casillas y guarda.
       </div>
 
       <div className="space-y-3">
@@ -197,6 +220,8 @@ export default function KnockoutAdminClient({
                   {phaseMatches.map(m => {
                     const s = scores[m.id] ?? { home_score: '', away_score: '' };
                     const teams = resolvedTeams[m.id];
+                    const isDraw = s.home_score !== '' && s.away_score !== '' && s.home_score === s.away_score;
+                    const canPenalties = isDraw && !!teams?.home && !!teams?.away && m.phase !== 'tp';
                     return (
                       <div key={m.id} className="bg-black/40 rounded-lg p-3">
                         <div className="flex items-center justify-between mb-2">
@@ -236,6 +261,34 @@ export default function KnockoutAdminClient({
                           />
                           <span className="text-zinc-400 text-sm">Visitante</span>
                         </div>
+
+                        {/* Selector de ganador en penales (solo en empates) */}
+                        {canPenalties && (
+                          <div className="mt-3 pt-3 border-t border-zinc-800">
+                            <div className="text-xs uppercase tracking-wider text-zinc-500 font-bold mb-2 text-center">
+                              ¿Quien gano en penales?
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => setWinner(m.id, teams!.home!)}
+                                className={`flex-1 px-3 py-2 rounded text-sm font-medium transition ${
+                                  winners[m.id] === teams!.home ? 'bg-lime-400 text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                                }`}>
+                                {FLAG[teams!.home!]} {TEAMS_ES[teams!.home!]}
+                              </button>
+                              <button onClick={() => setWinner(m.id, teams!.away!)}
+                                className={`flex-1 px-3 py-2 rounded text-sm font-medium transition ${
+                                  winners[m.id] === teams!.away ? 'bg-lime-400 text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                                }`}>
+                                {FLAG[teams!.away!]} {TEAMS_ES[teams!.away!]}
+                              </button>
+                            </div>
+                            {!winners[m.id] && (
+                              <p className="text-[11px] text-yellow-400/80 mt-2 text-center">
+                                Empate: elige quien avanza por penales.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

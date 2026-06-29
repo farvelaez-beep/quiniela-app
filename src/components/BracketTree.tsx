@@ -15,7 +15,8 @@ import { createClient } from '@/lib/supabase/client';
 //                         (para usarlo en su propia pagina/pestania "Fixture").
 
 type Resolved = { id: string; phase: string; position: number; home_team: string | null; away_team: string | null };
-type ScoreMap = Record<string, { home_score: number; away_score: number }>;
+type ScoreRow = { home_score: number; away_score: number; winner_team: string | null };
+type ScoreMap = Record<string, ScoreRow>;
 
 function TeamRow({ code, score, win, dim }: { code: string | null; score?: number; win: boolean; dim: boolean }) {
   return (
@@ -37,8 +38,10 @@ function MatchBox({ m, results }: { m: Resolved; results: ScoreMap }) {
   const score = results[m.id];
   const hs = score?.home_score;
   const as = score?.away_score;
-  const homeWin = !!score && hs! > as!;
-  const awayWin = !!score && as! > hs!;
+  const wt = score?.winner_team;
+  // Gana por marcador, o si hubo empate, por el ganador en penales.
+  const homeWin = !!score && (hs! > as! || (hs! === as! && wt === m.home_team));
+  const awayWin = !!score && (as! > hs! || (hs! === as! && wt === m.away_team));
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-md w-[108px] overflow-hidden shadow-sm">
       <TeamRow code={m.home_team} score={hs} win={homeWin} dim={awayWin} />
@@ -72,20 +75,29 @@ export default function BracketTree({ standalone = false }: { standalone?: boole
       const supabase = createClient();
       const { data } = await supabase
         .from('match_results')
-        .select('match_id, home_score, away_score');
+        .select('match_id, home_score, away_score, winner_team');
       const all: ScoreMap = {};
-      (data ?? []).forEach((r: { match_id: string; home_score: number; away_score: number }) => {
-        all[r.match_id] = { home_score: r.home_score, away_score: r.away_score };
+      (data ?? []).forEach((r: { match_id: string; home_score: number; away_score: number; winner_team: string | null }) => {
+        all[r.match_id] = { home_score: r.home_score, away_score: r.away_score, winner_team: r.winner_team ?? null };
       });
       setResults(all);
       setLoading(false);
     })();
   }, []);
 
-  const built = useMemo(() => buildUserBracket(results, results) as Resolved[], [results]);
+  // Resuelve los equipos reales del bracket. Pasa winner_team para que en los
+  // empates avance el ganador de penales.
+  const resolved = useMemo(() => {
+    const map: Record<string, { home: string | null; away: string | null }> = {};
+    const built = buildUserBracket(results, results);
+    built.forEach(r => { map[r.id] = { home: r.home_team, away: r.away_team }; });
+    return map;
+  }, [results]);
 
-  const byPhase = (ph: string) =>
-    built.filter(m => m.phase === ph).sort((a, b) => a.position - b.position);
+
+  // Construye objetos Resolved a partir del bracket resuelto.
+  const built = useMemo(() => buildUserBracket(results, results) as Resolved[], [results]);
+  const byPhase = (ph: string) => built.filter(m => m.phase === ph).sort((a, b) => a.position - b.position);
 
   const r32 = byPhase('r32');
   const r16 = byPhase('r16');
@@ -114,13 +126,11 @@ export default function BracketTree({ standalone = false }: { standalone?: boole
   ) : (
     <div className="overflow-x-auto pb-2">
       <div className="flex gap-2 items-stretch min-w-max" style={{ minHeight: 560 }}>
-        {/* MITAD IZQUIERDA */}
         <Column matches={leftR32} label="32avos" results={results} gapClass="gap-3" />
         <Column matches={leftR16} label="8vos" results={results} />
         <Column matches={leftQF} label="4tos" results={results} />
         <Column matches={leftSF} label="Semi" results={results} />
 
-        {/* CENTRO: FINAL (+ 3er puesto) */}
         <div className="flex flex-col justify-center items-center px-1">
           <div className="text-[9px] uppercase tracking-wider text-yellow-400 font-bold text-center mb-2 h-3">
             Final
@@ -138,7 +148,6 @@ export default function BracketTree({ standalone = false }: { standalone?: boole
           </div>
         </div>
 
-        {/* MITAD DERECHA (espejo) */}
         <Column matches={rightSF} label="Semi" results={results} />
         <Column matches={rightQF} label="4tos" results={results} />
         <Column matches={rightR16} label="8vos" results={results} />
@@ -147,7 +156,6 @@ export default function BracketTree({ standalone = false }: { standalone?: boole
     </div>
   );
 
-  // Modo pagina propia (pestania Fixture): sin colapsable, siempre expandido.
   if (standalone) {
     return (
       <div>
@@ -160,7 +168,6 @@ export default function BracketTree({ standalone = false }: { standalone?: boole
     );
   }
 
-  // Modo bloque colapsable (embebido en otra pantalla).
   return (
     <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden mb-4">
       <button
