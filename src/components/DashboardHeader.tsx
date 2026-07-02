@@ -53,8 +53,11 @@ export default function DashboardHeader({
     { href: '/dashboard/fixture', label: 'Fixture' },
     { href: '/dashboard/bonus', label: 'Goleador & Campeón' },
     { href: '/dashboard/leaderboard', label: 'Tabla' },
-    // La pestaña de "Pronósticos de todos" sólo aparece cuando está bloqueada la quiniela
-    ...(isLocked ? [{ href: '/dashboard/all-predictions', label: 'Todos los Pronósticos' }] : []),
+    // Pestañas que sólo aparecen cuando está bloqueada la quiniela
+    ...(isLocked ? [
+      { href: '/dashboard/all-predictions', label: 'Todos los Pronósticos' },
+      { href: '/dashboard/breakdown', label: 'Desglose' },
+    ] : []),
     { href: '/rules', label: 'Reglas' },
     ...(isAdmin ? [
       { href: '/dashboard/admin', label: 'Resultados (Admin)' },
