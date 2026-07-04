@@ -199,6 +199,79 @@ export default function BreakdownClient({
       XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
       XLSX.utils.book_append_sheet(wb, ws2, 'Eliminatorias');
       XLSX.utils.book_append_sheet(wb, ws3, 'Grupos');
+      // Una hoja por jugador con su desglose completo
+      const usedNames = new Set<string>(['Resumen', 'Eliminatorias', 'Grupos']);
+      players.forEach(p => {
+        const fp = predsByUser[p.id] ?? {};
+        const { g, k } = split(fp);
+        const tb = tiebreakersByUser[p.id] ?? {};
+        const ub = buildUserBracket(g, k, tb);
+        const bono = bonusByUser[p.id] ?? { top_scorer: null, champion: null };
+        const b = calculatePoints(
+          fp as Record<string, Score>, bono, results,
+          officialTopScorer, officialChampion, tb, officialTiebreakers,
+          fp['final']?.winner_team ?? null,
+        );
+
+        const rows: (string | number)[][] = [];
+        rows.push([`DESGLOSE DE PUNTOS — ${p.name}`, p.email]);
+        rows.push([]);
+        rows.push(['RESUMEN', 'Aciertos', 'Puntos']);
+        rows.push(['G-EX · Marcador exacto en Grupos (3 pts c/u)', b.exact, b.exact * 3]);
+        rows.push(['G-RES · Resultado acertado en Grupos (1 pt c/u)', b.outcome, b.outcome]);
+        rows.push(['POS · Posiciones 1°/2° acertadas por grupo (1 pt c/u)', b.groupPositions, b.groupPositions]);
+        rows.push(['E-EX · Marcador exacto en Eliminatorias (3 pts c/u)', b.knockoutExact, b.knockoutExact * 3]);
+        rows.push(['E-RES · Resultado acertado en Eliminatorias (1 pt c/u)', b.knockoutOutcome, b.knockoutOutcome]);
+        rows.push(['GOL · Goleador (5 pts)', b.scorer ? 'Sí' : 'No', b.scorer ? 5 : 0]);
+        rows.push(['CAMP · Campeón (5 pts)', b.champion ? 'Sí' : 'No', b.champion ? 5 : 0]);
+        rows.push(['TOTAL', '', b.total]);
+        rows.push([]);
+        rows.push(['ELIMINATORIAS · LLAVE POR LLAVE']);
+        rows.push(['Llave', 'Fase', 'Tu cruce', 'Tu marcador', 'Cruce real', 'Resultado real', 'Pts']);
+        BRACKET
+          .filter(m => results[m.id])
+          .sort((a, b2) => phaseOrder.indexOf(a.phase) - phaseOrder.indexOf(b2.phase) || a.position - b2.position)
+          .forEach(m => {
+            const mine = ub.find(x => x.id === m.id);
+            const real = realB.find(x => x.id === m.id);
+            const pred = k[m.id];
+            const res = results[m.id];
+            rows.push([
+              m.id.toUpperCase(), PHASE_LABELS[m.phase],
+              `${nm(mine?.home_team)} vs ${nm(mine?.away_team)}`,
+              pred ? `${pred.home_score}-${pred.away_score}` : '',
+              `${nm(real?.home_team)} vs ${nm(real?.away_team)}`,
+              `${res.home_score}-${res.away_score}${res.winner_team && res.home_score === res.away_score ? ` (pen: ${nm(res.winner_team)})` : ''}`,
+              scoreMatch(pred, res),
+            ]);
+          });
+        rows.push([]);
+        rows.push(['FASE DE GRUPOS · PARTIDO POR PARTIDO']);
+        rows.push(['Grupo', 'Partido', 'Tu marcador', 'Resultado', 'Pts']);
+        Object.keys(GROUPS).forEach(gk => {
+          ALL_MATCHES.filter((m: any) => m.group === gk).forEach((m: any) => {
+            const res = results[m.id]; if (!res) return;
+            const pred = fp[m.id];
+            rows.push([
+              gk, `${nm(homeOf(m))} vs ${nm(awayOf(m))}`,
+              pred ? `${pred.home_score}-${pred.away_score}` : '',
+              `${res.home_score}-${res.away_score}`,
+              scoreMatch(pred, res),
+            ]);
+          });
+          const pos = scoreGroupPositions(gk, fp as Record<string, Score>, results, tb[gk], officialTiebreakers[gk]);
+          if (pos > 0) rows.push([gk, 'Bono posiciones 1°/2° acertadas', '', '', pos]);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        ws['!cols'] = [{ wch: 46 }, { wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 30 }, { wch: 24 }, { wch: 6 }];
+        let sheetName = p.name.replace(/[\\\/\?\*\[\]:]/g, ' ').trim().slice(0, 28) || 'Jugador';
+        const baseName = sheetName; let n = 2;
+        while (usedNames.has(sheetName)) { sheetName = `${baseName.slice(0, 25)} ${n++}`; }
+        usedNames.add(sheetName);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      });
+
       const fecha = new Date().toISOString().slice(0, 10);
       XLSX.writeFile(wb, `desglose-puntos-${fecha}.xlsx`);
     } finally {
