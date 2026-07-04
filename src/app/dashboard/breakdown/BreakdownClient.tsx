@@ -5,7 +5,7 @@ import { GROUPS, ALL_MATCHES, TEAMS_ES, FLAG } from '@/lib/tournament-data';
 import { BRACKET, PHASE_LABELS } from '@/lib/bracket';
 import { buildUserBracket } from '@/lib/bracket-builder';
 import { scoreMatch, scoreGroupPositions, calculatePoints } from '@/lib/scoring';
-import { Users, ChevronDown, ChevronRight, Calculator } from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Calculator, Download } from 'lucide-react';
 
 type Pred = { home_score: number; away_score: number; winner_team: string | null };
 type Score = { home_score: number; away_score: number };
@@ -96,17 +96,134 @@ export default function BreakdownClient({
 
   const knockoutTotal = knockoutRows.reduce((s, r) => s + r.pts, 0);
 
+  // Exporta TODO el desglose (todos los jugadores) a un Excel de 3 hojas.
+  const [exporting, setExporting] = useState(false);
+  const exportExcel = async () => {
+    setExporting(true);
+    try {
+      const XLSX = await import('xlsx');
+      const nm = (c: string | null | undefined) => (c ? (TEAMS_ES[c] ?? c) : '—');
+      const split = (flat: Record<string, Pred>) => {
+        const g: Record<string, Pred> = {}; const k: Record<string, Pred> = {};
+        Object.entries(flat).forEach(([id, p]) => {
+          const isK = id.startsWith('r32_') || id.startsWith('r16_') || id.startsWith('qf_') ||
+                      id.startsWith('sf_') || id === 'tp' || id === 'final';
+          (isK ? k : g)[id] = p;
+        });
+        return { g, k };
+      };
+
+      // Hoja 1: Resumen de todos los jugadores
+      const resumen = players.map(p => {
+        const fp = predsByUser[p.id] ?? {};
+        const b = calculatePoints(
+          fp as Record<string, Score>,
+          bonusByUser[p.id] ?? { top_scorer: null, champion: null },
+          results, officialTopScorer, officialChampion,
+          tiebreakersByUser[p.id] ?? {}, officialTiebreakers,
+          fp['final']?.winner_team ?? null,
+        );
+        return {
+          'Jugador': p.name,
+          'Email': p.email,
+          'G-EX aciertos': b.exact, 'G-EX pts': b.exact * 3,
+          'G-RES pts': b.outcome,
+          'POS pts': b.groupPositions,
+          'E-EX aciertos': b.knockoutExact, 'E-EX pts': b.knockoutExact * 3,
+          'E-RES pts': b.knockoutOutcome,
+          'Goleador pts': b.scorer ? 5 : 0,
+          'Campeon pts': b.champion ? 5 : 0,
+          'TOTAL': b.total,
+        };
+      }).sort((a, b) => b.TOTAL - a.TOTAL);
+
+      // Hoja 2: Eliminatorias llave por llave (todos los jugadores)
+      const realB = buildUserBracket(results, results);
+      const elimRows: Record<string, string | number>[] = [];
+      players.forEach(p => {
+        const fp = predsByUser[p.id] ?? {};
+        const { g, k } = split(fp);
+        const ub = buildUserBracket(g, k, tiebreakersByUser[p.id] ?? {});
+        BRACKET
+          .filter(m => results[m.id])
+          .sort((a, b) => phaseOrder.indexOf(a.phase) - phaseOrder.indexOf(b.phase) || a.position - b.position)
+          .forEach(m => {
+            const mine = ub.find(x => x.id === m.id);
+            const real = realB.find(x => x.id === m.id);
+            const pred = k[m.id];
+            const res = results[m.id];
+            elimRows.push({
+              'Jugador': p.name,
+              'Llave': m.id.toUpperCase(),
+              'Fase': PHASE_LABELS[m.phase],
+              'Tu cruce': `${nm(mine?.home_team)} vs ${nm(mine?.away_team)}`,
+              'Tu marcador': pred ? `${pred.home_score}-${pred.away_score}` : '',
+              'Cruce real': `${nm(real?.home_team)} vs ${nm(real?.away_team)}`,
+              'Resultado real': `${res.home_score}-${res.away_score}${res.winner_team && res.home_score === res.away_score ? ` (pen: ${nm(res.winner_team)})` : ''}`,
+              'Pts': scoreMatch(pred, res),
+            });
+          });
+      });
+
+      // Hoja 3: Grupos partido por partido (todos los jugadores) + bono de posiciones
+      const grupoRows: Record<string, string | number>[] = [];
+      players.forEach(p => {
+        const fp = predsByUser[p.id] ?? {};
+        Object.keys(GROUPS).forEach(gk => {
+          ALL_MATCHES.filter((m: any) => m.group === gk).forEach((m: any) => {
+            const res = results[m.id]; if (!res) return;
+            const pred = fp[m.id];
+            grupoRows.push({
+              'Jugador': p.name,
+              'Grupo': gk,
+              'Partido': `${nm(homeOf(m))} vs ${nm(awayOf(m))}`,
+              'Tu marcador': pred ? `${pred.home_score}-${pred.away_score}` : '',
+              'Resultado': `${res.home_score}-${res.away_score}`,
+              'Pts': scoreMatch(pred, res),
+            });
+          });
+          const pos = scoreGroupPositions(gk, fp as Record<string, Score>, results, (tiebreakersByUser[p.id] ?? {})[gk], officialTiebreakers[gk]);
+          if (pos > 0) {
+            grupoRows.push({ 'Jugador': p.name, 'Grupo': gk, 'Partido': 'Bono posiciones 1°/2° acertadas', 'Tu marcador': '', 'Resultado': '', 'Pts': pos });
+          }
+        });
+      });
+
+      const wb = XLSX.utils.book_new();
+      const ws1 = XLSX.utils.json_to_sheet(resumen);
+      const ws2 = XLSX.utils.json_to_sheet(elimRows);
+      const ws3 = XLSX.utils.json_to_sheet(grupoRows);
+      ws1['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 12 }, { wch: 9 }, { wch: 9 }, { wch: 8 }, { wch: 12 }, { wch: 9 }, { wch: 9 }, { wch: 11 }, { wch: 11 }, { wch: 7 }];
+      ws2['!cols'] = [{ wch: 18 }, { wch: 8 }, { wch: 16 }, { wch: 30 }, { wch: 11 }, { wch: 30 }, { wch: 22 }, { wch: 5 }];
+      ws3['!cols'] = [{ wch: 18 }, { wch: 6 }, { wch: 34 }, { wch: 11 }, { wch: 10 }, { wch: 5 }];
+      XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
+      XLSX.utils.book_append_sheet(wb, ws2, 'Eliminatorias');
+      XLSX.utils.book_append_sheet(wb, ws3, 'Grupos');
+      const fecha = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `desglose-puntos-${fecha}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="pb-16">
-      <div className="mb-6">
-        <div className="flex items-center gap-2 text-zinc-400 text-xs uppercase tracking-widest mb-2">
-          <Calculator className="w-4 h-4"/>
-          <span>Auditoria de puntos · misma formula de la Tabla</span>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2 text-zinc-400 text-xs uppercase tracking-widest mb-2">
+            <Calculator className="w-4 h-4"/>
+            <span>Auditoria de puntos · misma formula de la Tabla</span>
+          </div>
+          <h1 className="font-display text-5xl leading-none mb-2">DESGLOSE DE PUNTOS</h1>
+          <p className="text-zinc-400 text-sm">
+            Punto por punto, de donde sale el puntaje de cada jugador. Las eliminatorias se puntuan <strong className="text-white">por llave (slot)</strong>: tu pronostico de cada llave se compara con el resultado real de esa misma llave.
+          </p>
         </div>
-        <h1 className="font-display text-5xl leading-none mb-2">DESGLOSE DE PUNTOS</h1>
-        <p className="text-zinc-400 text-sm">
-          Punto por punto, de donde sale el puntaje de cada jugador. Las eliminatorias se puntuan <strong className="text-white">por llave (slot)</strong>: tu pronostico de cada llave se compara con el resultado real de esa misma llave.
-        </p>
+        <button onClick={exportExcel} disabled={exporting}
+          className="flex items-center gap-2 bg-lime-400 text-black px-4 py-2.5 rounded-full font-bold text-sm hover:bg-lime-300 transition disabled:opacity-50 flex-shrink-0">
+          <Download className="w-4 h-4"/>
+          {exporting ? 'Generando…' : 'Exportar Excel'}
+        </button>
       </div>
 
       {/* Selector de jugador */}
